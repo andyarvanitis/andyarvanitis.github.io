@@ -1,0 +1,394 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Andy Arvanitis]]></title>
+  <link href="http://andyarvanitis.github.io/atom.xml" rel="self"/>
+  <link href="http://andyarvanitis.github.io/"/>
+  <updated>2013-11-03T17:10:23-08:00</updated>
+  <id>http://andyarvanitis.github.io/</id>
+  <author>
+    <name><![CDATA[Andy Arvanitis]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Lazy initialization for Objective-C]]></title>
+    <link href="http://andyarvanitis.github.io/lazy-initialization-for-objective-c/"/>
+    <updated>2013-09-22T14:47:00-07:00</updated>
+    <id>http://andyarvanitis.github.io/lazy-initialization-for-objective-c</id>
+    <content type="html"><![CDATA[<p><a href="http://en.wikipedia.org/wiki/Lazy_initialization">Lazy initialization</a> is a
+technique for delaying a computationally or memory-intensive operation until
+it&rsquo;s absolutely necessary. It&rsquo;s helpful for getting an object&rsquo;s expensive
+creation or initialization out of the critical path, improving responsiveness or
+memory use where it matters most.</p>
+
+<p>It&rsquo;s a useful coding pattern. So useful, in fact, that some languages provide
+direct support for it. Having used it many times in my career &mdash; and most
+recently in some Android Java code &mdash; I&rsquo;ve thought about it in the context of
+my <a href="http://eerolanguage.org/">Eero language project</a>. I wondered if I should
+consider adding support for it in the Eero language itself (if not now, then
+maybe in a future revision). But before I went that route, I thought I should
+have a go at figuring out a clean way to do it in standard Objective-C (and Eero,
+in its current form). My goal was to find a way to do it as unobtrusively as
+possible. I wanted minimal impact to the class/object to which it would be
+applied, making it akin to built-in language support, if at all possible. I&rsquo;d
+settle for either a simple and clean pattern, or a small and non-fragile library.</p>
+
+<p>This is what I came up with. It&rsquo;s probably been done before, in a similar, or
+perhaps even the exact same way, by someone else. But not having spotted it
+documented anywhere else, I thought I&rsquo;d share my results.</p>
+
+<p>Note that, beyond what I&rsquo;ve already said, I won&rsquo;t provide a detailed argument
+for lazy initialization&rsquo;s utility, or say much about how it shouldn’t be
+overused (<em>it shouldn&rsquo;t be overused!</em>). I just want to document what I think is
+a nice way to do it.</p>
+
+<h2>What using it looks like</h2>
+
+<p>I&rsquo;ll jump right to the final results here, at least from the perspective of the
+user of the pattern/library.</p>
+
+<p>Given a <em>type-safe</em> class method in a category has been defined on NSObject,
+like so:</p>
+
+<pre><code>@interface NSObject (LazyInitialization)
+  + (instancetype)lazy;
+@end
+</code></pre>
+
+<p>Class method <code>lazy</code> takes the place of both <code>alloc</code> and <code>new</code> when creating a
+lazy instance. It can be chained with an <code>init</code> method or used on its own.</p>
+
+<pre><code>SomeClass *object = [SomeClass lazy];
+
+// ... do stuff
+// ... sometime later...
+
+[object doSomething]; // object will get initialized here, 
+                      // and then perform 'doSomething'
+</code></pre>
+
+<p>That&rsquo;s it. No special checks before or within the first method call.
+The lazy object can be of any class type. The method called can be a
+regular instance method, or a property getter or setter. Any notation (e.g.,
+property dot-notation) can be used. Either ARC or MRC is also fine.</p>
+
+<p>As mentioned, class method <code>lazy</code> can be used standalone (acting like <code>new</code> when
+the object goes active), chained with <code>init</code>, or chained with an <code>initWith</code> method.
+The last case requires a bit of caution for pointers. Specifically, Objective-C
+objects passed in get a <code>retain</code> and automatic <code>release</code>; C strings (any
+<code>char*</code>, actually) get <em>copied</em> and freed automatically; and any other pointer
+types are left alone. So for objects and C strings, there&rsquo;s nothing special you
+need to do (although you’ll want to watch out for large string buffer copies).
+But for pointers to any other type of data, you need to make sure the data stays
+valid until the object fully initializes.</p>
+
+<pre><code>NSMutableString *str = [NSMutableString new];
+[str appendString:@"Hello"];
+ClassX *obj1 = [[ClassX lazy] initWithString:str]; // str retained
+
+ClassX *obj2 = [[ClassX lazy] initWithCString:"Hi"]; // char* copied
+
+void *buf = ...
+ClassX *obj3 = [[ClassX lazy] initWithBuffer:buf]; // nothing done
+</code></pre>
+
+<h2>How it all works</h2>
+
+<p>Class method <code>lazy</code> returns an instance of a proxy object for the specified
+class. The proxy then uses standard message forwarding to cache the <code>init</code>
+invocation for later, and to create the real object instance at the appropriate
+time and forward all subsequent messages. Memory management messages are not
+forwarded, since they need to manage the lifetime of the proxy, which owns the
+&ldquo;real&rdquo; object.</p>
+
+<p>The base class of the proxy object is Foundation&rsquo;s <code>NSProxy</code>. As you would
+imagine, it&rsquo;s designed for just this sort of purpose.</p>
+
+<p>As for the forwarding mechanism, Foundation and the runtime provide two
+different means: <code>forwardingTargetForSelector</code>, and <code>methodSignatureForSelector</code>
+combined with <code>forwardInvocation</code>. Of the two, <code>forwardingTargetForSelector</code> is
+faster. In the following code, the second, slower method(s) is only used to
+cache the <code>init</code> method. Once the init happens, the faster method is used
+exclusively and for the majority of the object&rsquo;s active life.</p>
+
+<p>So here&rsquo;s the final code in Objective-C:</p>
+
+<p><em>lazyinit.h</em></p>
+
+<pre><code>#import &lt;Foundation/Foundation.h&gt;
+
+@interface NSObject (LazyInitialization)
+  + (instancetype)lazy;
+@end
+</code></pre>
+
+<p><em>lazyinit.m</em></p>
+
+<pre><code>#import &lt;Foundation/Foundation.h&gt;
+#import "lazyinit.h"
+
+#if !__has_feature(objc_arc)
+   #error ARC must be enabled for this source file (but clients can use MRC).
+#endif
+
+@interface LazyProxy : NSProxy
+- (instancetype)initWithClass:(Class)class;
+@end
+
+@implementation NSObject (LazyInitialization)
++ (instancetype)lazy {
+  return (id)[LazyProxy.alloc initWithClass: [self class]];
+}
+@end
+
+@implementation LazyProxy {
+  id _object;
+  Class _objectClass;
+  NSInvocation *_initInvocation;
+}
+
+- (instancetype)initWithClass:(Class)cls {
+  _objectClass = cls;
+  return self;
+}
+
+- (void)instantiateObject {
+  _object = [_objectClass alloc];
+  if (_initInvocation == nil) {  // allow SomeClass.lazy (no explicit init)
+    _object = [_object init];
+  } else {
+    [_initInvocation invokeWithTarget:_object];
+    [_initInvocation getReturnValue:&amp;_object];
+    _initInvocation = nil;
+  }
+}
+
+- (id)forwardingTargetForSelector:(SEL)selector {
+  if (_object == nil) {  // once set, fast forwarding is in effect
+    if (![NSStringFromSelector(selector) hasPrefix:@"init"]) {
+      [self instantiateObject];
+    }
+  }
+  return _object;
+}
+
+- (NSMethodSignature *)methodSignatureForSelector:(SEL)selector {
+  NSMethodSignature *signature =
+      [_objectClass instanceMethodSignatureForSelector:selector];
+  return signature;
+}
+
+// If we got here, it had to be from an init method
+- (void)forwardInvocation:(NSInvocation *)invocation {
+  _initInvocation = invocation;
+  [_initInvocation setTarget:nil];  // not needed, and we don't want to retain
+  [_initInvocation retainArguments];
+  // For the immediate init(With...) call, return the proxy itself
+  [_initInvocation setReturnValue:(void *)&amp;self];
+}
+
+//----------------------------------------------------------------------------
+// Implemented by NSProxy, so we need to forward these manually
+//----------------------------------------------------------------------------
+
+- (Class)class {
+  if (_object == nil) {
+    [self instantiateObject];
+  }
+  return [_object class];
+} 
+
+- (Class)superclass {
+  if (_object == nil) {
+    [self instantiateObject];
+  }
+  return [_object superclass];
+}
+
+- (BOOL)conformsToProtocol:(Protocol *)aProtocol {
+  if (self-&gt;_object == nil) {
+    [self instantiateObject];
+  }
+  return [self-&gt;_object conformsToProtocol:aProtocol];
+}
+
+- (NSString *)description {
+  if (self-&gt;_object == nil) {
+    [self instantiateObject];
+  }
+  return [self-&gt;_object description];
+}
+
+- (NSUInteger)hash {
+  if (self-&gt;_object == nil) {
+    [self instantiateObject];
+  }
+  return [self-&gt;_object hash];
+}
+
+- (BOOL)isEqual:(id)obj {
+  if (self-&gt;_object == nil) {
+    [self instantiateObject];
+  }
+  return [self-&gt;_object isEqual:obj];
+}
+
+- (BOOL)isKindOfClass:(Class)aClass {
+  if (self-&gt;_object == nil) {
+    [self instantiateObject];
+  }
+  return [self-&gt;_object isKindOfClass:aClass];
+}
+
+- (BOOL)isMemberOfClass:(Class)aClass {
+  if (self-&gt;_object == nil) {
+    [self instantiateObject];
+  }
+  return [self-&gt;_object isMemberOfClass:aClass];
+}
+
+- (BOOL)respondsToSelector:(SEL)selector {
+  if (self-&gt;_object == nil) {
+    [self instantiateObject];
+  }
+  return [self-&gt;_object respondsToSelector:selector];
+}
+
+@end
+</code></pre>
+
+<h2>Eero version</h2>
+
+<p>The Objective-C version can of course be
+<a href="http://eerolanguage.org/documentation/index.html#importsincludes">used directly in Eero</a>,
+but since this started out as Eero code, you&rsquo;ll find the Eero version below.</p>
+
+<p>(By the way, the ObjC example above was automatically converted to Objective-C
+using <a href="https://github.com/eerolanguage/eero/wiki/Translator">Eero&rsquo;s source-source translator</a>
+and formatted using <a href="http://clang.llvm.org/docs/ClangFormat.html">clang-format</a>).</p>
+
+<p><em>lazyinit.eeh</em></p>
+
+<pre><code>#import &lt;Foundation/Foundation.h&gt;
+
+interface Object (LazyInitialization)
+  +lazy, return instancetype
+end
+</code></pre>
+
+<p><em>lazyinit.eero</em></p>
+
+<pre><code>#import &lt;Foundation/Foundation.h&gt;
+#import 'lazyinit.eeh'
+
+#if !__has_feature(objc_arc)
+  #error ARC must be enabled for this source file (but clients can use MRC).
+#endif
+
+interface LazyProxy : Proxy
+  initWithClass: Class, return instancetype   
+end
+
+implementation Object (LazyInstantiation)
+  +lazy, return instancetype
+    return (id)LazyProxy.alloc.initWithClass: self.class
+end
+
+implementation LazyProxy 
+  id _object
+  Class _objectClass
+  Invocation _initInvocation
+
+  initWithClass: Class cls, return instancetype
+    _objectClass = cls
+    return self
+
+  instantiateObject
+    _object = _objectClass.alloc
+    if _initInvocation == nil // allow SomeClass.lazy (no explicit init)
+      _object = _object.init
+    else
+      _initInvocation.invokeWithTarget: _object
+      _initInvocation.getReturnValue: &amp;_object
+      _initInvocation = nil
+
+  forwardingTargetForSelector: SEL, return id
+    if _object == nil // once set, fast forwarding is in effect
+      if not StringFromSelector(selector).hasPrefix: 'init'
+        self.instantiateObject
+    return _object
+
+  methodSignatureForSelector: SEL, return MethodSignature
+    signature := _objectClass.instanceMethodSignatureForSelector: selector 
+    return signature
+
+  // If we got here, it had to be from an init method
+  forwardInvocation: Invocation
+    _initInvocation = invocation
+    _initInvocation.setTarget: nil // not needed, and we don't want to retain
+    _initInvocation.retainArguments
+    // For the immediate init(With...) call, return the proxy itself
+    _initInvocation.setReturnValue: (void*)&amp;self
+
+  //--------------------------------------------------------------------------
+  // Implemented by NSProxy, so we need to forward these manually
+  //--------------------------------------------------------------------------
+
+  -class, return Class
+    if _object == nil  
+      self.instantiateObject
+    return _object.class
+
+  -superclass, return Class
+    if _object == nil  
+      self.instantiateObject
+    return _object.superclass
+
+  conformsToProtocol: Protocol aProtocol, return BOOL
+    if _object == nil  
+      self.instantiateObject
+    return _object.conformsToProtocol: aProtocol
+
+  description, return String
+    if _object == nil  
+      self.instantiateObject
+    return _object.description
+
+  hash, return UInteger
+    if _object == nil  
+      self.instantiateObject
+    return _object.hash
+
+  isEqual: id obj, return BOOL
+    if _object == nil  
+      self.instantiateObject
+    return _object.isEqual: obj
+
+  isKindOfClass: Class aClass, return BOOL
+    if _object == nil  
+      self.instantiateObject
+    return _object.isKindOfClass: aClass
+
+  isMemberOfClass: Class aClass, return BOOL
+    if _object == nil  
+      self.instantiateObject
+    return _object.isMemberOfClass: aClass
+
+  respondsToSelector: SEL, return BOOL
+    if _object == nil  
+      self.instantiateObject
+    return _object.respondsToSelector: selector
+
+end
+</code></pre>
+
+<p>So there you have it. Please feel free to
+<a href="https://twitter.com/intent/tweet?text=@andyarvanitis%20">provide feedback via twitter</a>.
+I also plan to submit the resulting library to <a href="http://cocoapods.org/">Cocoapods</a>.</p>
+]]></content>
+  </entry>
+  
+</feed>

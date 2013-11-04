@@ -1,0 +1,583 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Lazy initialization for Objective-C - Andy Arvanitis</title>
+  <meta name="author" content="Andy Arvanitis">
+
+  
+  <meta name="description" content="Lazy initialization is a
+technique for delaying a computationally or memory-intensive operation until
+it&rsquo;s absolutely necessary. It&rsquo;s &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://andyarvanitis.github.io/lazy-initialization-for-objective-c">
+  <link href="/favicon.ico" rel="icon">
+  
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="/javascripts/ender.js"></script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="http://feeds.feedburner.com/AndyArvanitis" rel="alternate" title="Andy Arvanitis" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<script src="https://google-code-prettify.googlecode.com/svn/loader/run_prettify.js"></script>
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+<script type='text/javascript'>
+  $(function() {
+    // add prettyprint class to all <pre><code></code></pre> blocks
+    var prettify = false;
+    $("pre code").parent().each(function() {
+        $(this).addClass('prettyprint');
+        prettify = true;
+    });
+    // if code blocks were found, bring in the prettifier ...
+    if ( prettify ) {
+        $.getScript("/js/prettify.js", function() { prettyPrint() });
+    }
+  });
+</script>
+
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-21151919-2']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   class="no-sidebar"  >
+  <header role="banner"><hgroup>
+  <h2><a href="/">Andy Arvanitis</a></h2>
+
+<!--   <h1>Andy Arvanitis</h1>
+  
+ -->
+</hgroup>
+
+</header>
+  <nav role="navigation">
+  
+
+<ul class="main-navigation">
+
+  <li>
+  <span>
+    <form action="http://google.com/search" method="get">
+      <fieldset role="search">
+        <input type="hidden" name="q" value="site:andyarvanitis.github.io" />
+        <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+      </fieldset>
+    </form>
+	</span>
+  </li>
+  <li><a href="/archives">Archives</a></li>
+  <li><a href="http://feeds.feedburner.com/AndyArvanitis/">RSS</a></li>
+  <li>
+    <span>
+      <a href="http://twitter.com/andyarvanitis" class="twitter_profile">&nbsp;</a>
+      <a href="http://github.com/andyarvanitis" class="github_profile">&nbsp;</a>
+    </span>
+  </li>
+</ul>
+
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Lazy Initialization for Objective-C</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2013-09-22T14:47:00-07:00" pubdate data-updated="true">September 22 2013</time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p><a href="http://en.wikipedia.org/wiki/Lazy_initialization">Lazy initialization</a> is a
+technique for delaying a computationally or memory-intensive operation until
+it&rsquo;s absolutely necessary. It&rsquo;s helpful for getting an object&rsquo;s expensive
+creation or initialization out of the critical path, improving responsiveness or
+memory use where it matters most.</p>
+
+<p>It&rsquo;s a useful coding pattern. So useful, in fact, that some languages provide
+direct support for it. Having used it many times in my career &mdash; and most
+recently in some Android Java code &mdash; I&rsquo;ve thought about it in the context of
+my <a href="http://eerolanguage.org/">Eero language project</a>. I wondered if I should
+consider adding support for it in the Eero language itself (if not now, then
+maybe in a future revision). But before I went that route, I thought I should
+have a go at figuring out a clean way to do it in standard Objective-C (and Eero,
+in its current form). My goal was to find a way to do it as unobtrusively as
+possible. I wanted minimal impact to the class/object to which it would be
+applied, making it akin to built-in language support, if at all possible. I&rsquo;d
+settle for either a simple and clean pattern, or a small and non-fragile library.</p>
+
+<p>This is what I came up with. It&rsquo;s probably been done before, in a similar, or
+perhaps even the exact same way, by someone else. But not having spotted it
+documented anywhere else, I thought I&rsquo;d share my results.</p>
+
+<p>Note that, beyond what I&rsquo;ve already said, I won&rsquo;t provide a detailed argument
+for lazy initialization&rsquo;s utility, or say much about how it shouldn’t be
+overused (<em>it shouldn&rsquo;t be overused!</em>). I just want to document what I think is
+a nice way to do it.</p>
+
+<h2>What using it looks like</h2>
+
+<p>I&rsquo;ll jump right to the final results here, at least from the perspective of the
+user of the pattern/library.</p>
+
+<p>Given a <em>type-safe</em> class method in a category has been defined on NSObject,
+like so:</p>
+
+<pre><code>@interface NSObject (LazyInitialization)
+  + (instancetype)lazy;
+@end
+</code></pre>
+
+<p>Class method <code>lazy</code> takes the place of both <code>alloc</code> and <code>new</code> when creating a
+lazy instance. It can be chained with an <code>init</code> method or used on its own.</p>
+
+<pre><code>SomeClass *object = [SomeClass lazy];
+
+// ... do stuff
+// ... sometime later...
+
+[object doSomething]; // object will get initialized here, 
+                      // and then perform 'doSomething'
+</code></pre>
+
+<p>That&rsquo;s it. No special checks before or within the first method call.
+The lazy object can be of any class type. The method called can be a
+regular instance method, or a property getter or setter. Any notation (e.g.,
+property dot-notation) can be used. Either ARC or MRC is also fine.</p>
+
+<p>As mentioned, class method <code>lazy</code> can be used standalone (acting like <code>new</code> when
+the object goes active), chained with <code>init</code>, or chained with an <code>initWith</code> method.
+The last case requires a bit of caution for pointers. Specifically, Objective-C
+objects passed in get a <code>retain</code> and automatic <code>release</code>; C strings (any
+<code>char*</code>, actually) get <em>copied</em> and freed automatically; and any other pointer
+types are left alone. So for objects and C strings, there&rsquo;s nothing special you
+need to do (although you’ll want to watch out for large string buffer copies).
+But for pointers to any other type of data, you need to make sure the data stays
+valid until the object fully initializes.</p>
+
+<pre><code>NSMutableString *str = [NSMutableString new];
+[str appendString:@"Hello"];
+ClassX *obj1 = [[ClassX lazy] initWithString:str]; // str retained
+
+ClassX *obj2 = [[ClassX lazy] initWithCString:"Hi"]; // char* copied
+
+void *buf = ...
+ClassX *obj3 = [[ClassX lazy] initWithBuffer:buf]; // nothing done
+</code></pre>
+
+<h2>How it all works</h2>
+
+<p>Class method <code>lazy</code> returns an instance of a proxy object for the specified
+class. The proxy then uses standard message forwarding to cache the <code>init</code>
+invocation for later, and to create the real object instance at the appropriate
+time and forward all subsequent messages. Memory management messages are not
+forwarded, since they need to manage the lifetime of the proxy, which owns the
+&ldquo;real&rdquo; object.</p>
+
+<p>The base class of the proxy object is Foundation&rsquo;s <code>NSProxy</code>. As you would
+imagine, it&rsquo;s designed for just this sort of purpose.</p>
+
+<p>As for the forwarding mechanism, Foundation and the runtime provide two
+different means: <code>forwardingTargetForSelector</code>, and <code>methodSignatureForSelector</code>
+combined with <code>forwardInvocation</code>. Of the two, <code>forwardingTargetForSelector</code> is
+faster. In the following code, the second, slower method(s) is only used to
+cache the <code>init</code> method. Once the init happens, the faster method is used
+exclusively and for the majority of the object&rsquo;s active life.</p>
+
+<p>So here&rsquo;s the final code in Objective-C:</p>
+
+<p><em>lazyinit.h</em></p>
+
+<pre><code>#import &lt;Foundation/Foundation.h&gt;
+
+@interface NSObject (LazyInitialization)
+  + (instancetype)lazy;
+@end
+</code></pre>
+
+<p><em>lazyinit.m</em></p>
+
+<pre><code>#import &lt;Foundation/Foundation.h&gt;
+#import "lazyinit.h"
+
+#if !__has_feature(objc_arc)
+   #error ARC must be enabled for this source file (but clients can use MRC).
+#endif
+
+@interface LazyProxy : NSProxy
+- (instancetype)initWithClass:(Class)class;
+@end
+
+@implementation NSObject (LazyInitialization)
++ (instancetype)lazy {
+  return (id)[LazyProxy.alloc initWithClass: [self class]];
+}
+@end
+
+@implementation LazyProxy {
+  id _object;
+  Class _objectClass;
+  NSInvocation *_initInvocation;
+}
+
+- (instancetype)initWithClass:(Class)cls {
+  _objectClass = cls;
+  return self;
+}
+
+- (void)instantiateObject {
+  _object = [_objectClass alloc];
+  if (_initInvocation == nil) {  // allow SomeClass.lazy (no explicit init)
+    _object = [_object init];
+  } else {
+    [_initInvocation invokeWithTarget:_object];
+    [_initInvocation getReturnValue:&amp;_object];
+    _initInvocation = nil;
+  }
+}
+
+- (id)forwardingTargetForSelector:(SEL)selector {
+  if (_object == nil) {  // once set, fast forwarding is in effect
+    if (![NSStringFromSelector(selector) hasPrefix:@"init"]) {
+      [self instantiateObject];
+    }
+  }
+  return _object;
+}
+
+- (NSMethodSignature *)methodSignatureForSelector:(SEL)selector {
+  NSMethodSignature *signature =
+      [_objectClass instanceMethodSignatureForSelector:selector];
+  return signature;
+}
+
+// If we got here, it had to be from an init method
+- (void)forwardInvocation:(NSInvocation *)invocation {
+  _initInvocation = invocation;
+  [_initInvocation setTarget:nil];  // not needed, and we don't want to retain
+  [_initInvocation retainArguments];
+  // For the immediate init(With...) call, return the proxy itself
+  [_initInvocation setReturnValue:(void *)&amp;self];
+}
+
+//----------------------------------------------------------------------------
+// Implemented by NSProxy, so we need to forward these manually
+//----------------------------------------------------------------------------
+
+- (Class)class {
+  if (_object == nil) {
+    [self instantiateObject];
+  }
+  return [_object class];
+} 
+
+- (Class)superclass {
+  if (_object == nil) {
+    [self instantiateObject];
+  }
+  return [_object superclass];
+}
+
+- (BOOL)conformsToProtocol:(Protocol *)aProtocol {
+  if (self-&gt;_object == nil) {
+    [self instantiateObject];
+  }
+  return [self-&gt;_object conformsToProtocol:aProtocol];
+}
+
+- (NSString *)description {
+  if (self-&gt;_object == nil) {
+    [self instantiateObject];
+  }
+  return [self-&gt;_object description];
+}
+
+- (NSUInteger)hash {
+  if (self-&gt;_object == nil) {
+    [self instantiateObject];
+  }
+  return [self-&gt;_object hash];
+}
+
+- (BOOL)isEqual:(id)obj {
+  if (self-&gt;_object == nil) {
+    [self instantiateObject];
+  }
+  return [self-&gt;_object isEqual:obj];
+}
+
+- (BOOL)isKindOfClass:(Class)aClass {
+  if (self-&gt;_object == nil) {
+    [self instantiateObject];
+  }
+  return [self-&gt;_object isKindOfClass:aClass];
+}
+
+- (BOOL)isMemberOfClass:(Class)aClass {
+  if (self-&gt;_object == nil) {
+    [self instantiateObject];
+  }
+  return [self-&gt;_object isMemberOfClass:aClass];
+}
+
+- (BOOL)respondsToSelector:(SEL)selector {
+  if (self-&gt;_object == nil) {
+    [self instantiateObject];
+  }
+  return [self-&gt;_object respondsToSelector:selector];
+}
+
+@end
+</code></pre>
+
+<h2>Eero version</h2>
+
+<p>The Objective-C version can of course be
+<a href="http://eerolanguage.org/documentation/index.html#importsincludes">used directly in Eero</a>,
+but since this started out as Eero code, you&rsquo;ll find the Eero version below.</p>
+
+<p>(By the way, the ObjC example above was automatically converted to Objective-C
+using <a href="https://github.com/eerolanguage/eero/wiki/Translator">Eero&rsquo;s source-source translator</a>
+and formatted using <a href="http://clang.llvm.org/docs/ClangFormat.html">clang-format</a>).</p>
+
+<p><em>lazyinit.eeh</em></p>
+
+<pre><code>#import &lt;Foundation/Foundation.h&gt;
+
+interface Object (LazyInitialization)
+  +lazy, return instancetype
+end
+</code></pre>
+
+<p><em>lazyinit.eero</em></p>
+
+<pre><code>#import &lt;Foundation/Foundation.h&gt;
+#import 'lazyinit.eeh'
+
+#if !__has_feature(objc_arc)
+  #error ARC must be enabled for this source file (but clients can use MRC).
+#endif
+
+interface LazyProxy : Proxy
+  initWithClass: Class, return instancetype   
+end
+
+implementation Object (LazyInstantiation)
+  +lazy, return instancetype
+    return (id)LazyProxy.alloc.initWithClass: self.class
+end
+
+implementation LazyProxy 
+  id _object
+  Class _objectClass
+  Invocation _initInvocation
+
+  initWithClass: Class cls, return instancetype
+    _objectClass = cls
+    return self
+
+  instantiateObject
+    _object = _objectClass.alloc
+    if _initInvocation == nil // allow SomeClass.lazy (no explicit init)
+      _object = _object.init
+    else
+      _initInvocation.invokeWithTarget: _object
+      _initInvocation.getReturnValue: &amp;_object
+      _initInvocation = nil
+
+  forwardingTargetForSelector: SEL, return id
+    if _object == nil // once set, fast forwarding is in effect
+      if not StringFromSelector(selector).hasPrefix: 'init'
+        self.instantiateObject
+    return _object
+
+  methodSignatureForSelector: SEL, return MethodSignature
+    signature := _objectClass.instanceMethodSignatureForSelector: selector 
+    return signature
+
+  // If we got here, it had to be from an init method
+  forwardInvocation: Invocation
+    _initInvocation = invocation
+    _initInvocation.setTarget: nil // not needed, and we don't want to retain
+    _initInvocation.retainArguments
+    // For the immediate init(With...) call, return the proxy itself
+    _initInvocation.setReturnValue: (void*)&amp;self
+
+  //--------------------------------------------------------------------------
+  // Implemented by NSProxy, so we need to forward these manually
+  //--------------------------------------------------------------------------
+
+  -class, return Class
+    if _object == nil  
+      self.instantiateObject
+    return _object.class
+
+  -superclass, return Class
+    if _object == nil  
+      self.instantiateObject
+    return _object.superclass
+
+  conformsToProtocol: Protocol aProtocol, return BOOL
+    if _object == nil  
+      self.instantiateObject
+    return _object.conformsToProtocol: aProtocol
+
+  description, return String
+    if _object == nil  
+      self.instantiateObject
+    return _object.description
+
+  hash, return UInteger
+    if _object == nil  
+      self.instantiateObject
+    return _object.hash
+
+  isEqual: id obj, return BOOL
+    if _object == nil  
+      self.instantiateObject
+    return _object.isEqual: obj
+
+  isKindOfClass: Class aClass, return BOOL
+    if _object == nil  
+      self.instantiateObject
+    return _object.isKindOfClass: aClass
+
+  isMemberOfClass: Class aClass, return BOOL
+    if _object == nil  
+      self.instantiateObject
+    return _object.isMemberOfClass: aClass
+
+  respondsToSelector: SEL, return BOOL
+    if _object == nil  
+      self.instantiateObject
+    return _object.respondsToSelector: selector
+
+end
+</code></pre>
+
+<p>So there you have it. Please feel free to
+<a href="https://twitter.com/intent/tweet?text=@andyarvanitis%20">provide feedback via twitter</a>.
+I also plan to submit the resulting library to <a href="http://cocoapods.org/">Cocoapods</a>.</p>
+</div>
+
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn"><a href="/about" title="About the author (Andy Arvanitis)" rel="author">Andy Arvanitis</a></span></span>
+
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2013-09-22T14:47:00-07:00" pubdate data-updated="true">September 22 2013</time>
+      
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://andyarvanitis.github.io/lazy-initialization-for-objective-c/" data-via="andyarvanitis" data-counturl="http://andyarvanitis.github.io/lazy-initialization-for-objective-c/" data-text="“Lazy initialization for Objective-C”">Tweet</a>
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2013 - Andy Arvanitis -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>
