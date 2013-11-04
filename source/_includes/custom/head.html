@@ -1,4 +1,4 @@
-<script type="text/javascript" src="http://fast.fonts.net/jsapi/f55520d6-4a35-47fc-865a-a7225369bb75.js"></script>
+<link type="text/css" rel="stylesheet" href="http://fast.fonts.net/cssapi/f55520d6-4a35-47fc-865a-a7225369bb75.css"/>
 <script src="https://google-code-prettify.googlecode.com/svn/loader/run_prettify.js"></script>
 <script src="//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
 <script type='text/javascript'>
@@ -9,9 +9,8 @@
         $(this).addClass('prettyprint');
         prettify = true;
     });
-    // if code blocks were found, bring in the prettifier ...
     if ( prettify ) {
-        prettyPrint();
+        $.getScript("https://google-code-prettify.googlecode.com/svn/loader/prettify.js", function() { prettyPrint() });
     }
   });
 </script>
