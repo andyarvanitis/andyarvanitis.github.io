@@ -39,6 +39,9 @@ it&rsquo;s absolutely necessary. It&rsquo;s &hellip;">
         $(this).addClass('prettyprint');
         prettify = true;
     });
+    if ( prettify ) {
+        $.getScript("/js/prettify.js", function() { prettyPrint() });
+    }
   });
 </script>
 
