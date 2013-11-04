@@ -1,0 +1,73 @@
+// This File is imported last, and will override other styles in the cascade
+// Add styles here to make changes without digging in too much
+
+body header {
+  margin-bottom: 0.5em;
+  h1 {
+    font-size: 1.75em;
+  }
+  h2 a {
+    font-size: 0.5em;
+  }
+}
+
+ul.main-navigation {
+  display: inline;
+  li {
+    overflow: hidden; 
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    form {
+      float: left;
+      padding-left: 0;
+      width: 95%;
+    }
+  }
+}
+
+.twitter_profile  {
+ background: inline-image('twitter-bird-light-bgs.png') no-repeat left;
+}
+
+.twitter_profile:hover {
+ background: inline-image('twitter-bird-light-bgs-hover.png') no-repeat left;
+}
+
+.twitter_profile, .twitter_profile:hover  {
+ display:block;
+ width: 2em;
+ margin-left: -0.25em;
+ background-size: 100%;
+}
+
+.github_profile {
+ background: inline-image('blacktocat-32.png') no-repeat left;
+}
+
+.github_profile:hover {
+ background: inline-image('blacktocat-32-hover.png') no-repeat left;
+}
+
+.github_profile, .github_profile:hover {
+ display:block;
+ width: 2em;
+ background-size: 60%;
+}
+
+p, li {
+  code {
+    background: inherit;
+    padding: inherit;
+  }
+}
+
+pre {
+  background: inherit;
+  padding: 1em 1em !important;
+}
+
+body h2 {
+   color: #777;
+}
+
+

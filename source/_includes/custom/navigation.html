@@ -1,0 +1,23 @@
+
+<ul class="main-navigation">
+
+  <li>
+  <span>
+    <form action="{{ site.simple_search }}" method="get">
+      <fieldset role="search">
+        <input type="hidden" name="q" value="site:{{ site.url | shorthand_url }}" />
+        <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+      </fieldset>
+    </form>
+	</span>
+  </li>
+  <li><a href="{{ root_url }}/archives">Archives</a></li>
+  <li><a href="{{ site.subscribe_rss }}/">RSS</a></li>
+  <li>
+    <span>
+      <a href="http://twitter.com/{{site.twitter_user}}" class="twitter_profile">&nbsp;</a>
+      <a href="http://github.com/{{site.github_user}}" class="github_profile">&nbsp;</a>
+    </span>
+  </li>
+</ul>
+

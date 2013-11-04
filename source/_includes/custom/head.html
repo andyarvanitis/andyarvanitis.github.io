@@ -1,0 +1,19 @@
+<!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<script src="https://google-code-prettify.googlecode.com/svn/loader/run_prettify.js"></script>
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+<script type='text/javascript'>
+  $(function() {
+    // add prettyprint class to all <pre><code></code></pre> blocks
+    var prettify = false;
+    $("pre code").parent().each(function() {
+        $(this).addClass('prettyprint');
+        prettify = true;
+    });
+    // if code blocks were found, bring in the prettifier ...
+    if ( prettify ) {
+        $.getScript("/js/prettify.js", function() { prettyPrint() });
+    }
+  });
+</script>
