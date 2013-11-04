@@ -2,10 +2,10 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
 
   <title><![CDATA[Andy Arvanitis]]></title>
-  <link href="http://andyarvanitis.github.io/atom.xml" rel="self"/>
-  <link href="http://andyarvanitis.github.io/"/>
-  <updated>2013-11-03T20:46:22-08:00</updated>
-  <id>http://andyarvanitis.github.io/</id>
+  <link href="http://andyarvanitis.com/atom.xml" rel="self"/>
+  <link href="http://andyarvanitis.com/"/>
+  <updated>2013-11-03T21:25:11-08:00</updated>
+  <id>http://andyarvanitis.com/</id>
   <author>
     <name><![CDATA[Andy Arvanitis]]></name>
     
@@ -15,9 +15,9 @@
   
   <entry>
     <title type="html"><![CDATA[Lazy initialization for Objective-C]]></title>
-    <link href="http://andyarvanitis.github.io/lazy-initialization-for-objective-c/"/>
+    <link href="http://andyarvanitis.com/lazy-initialization-for-objective-c/"/>
     <updated>2013-09-22T14:47:00-07:00</updated>
-    <id>http://andyarvanitis.github.io/lazy-initialization-for-objective-c</id>
+    <id>http://andyarvanitis.com/lazy-initialization-for-objective-c</id>
     <content type="html"><![CDATA[<p><a href="http://en.wikipedia.org/wiki/Lazy_initialization">Lazy initialization</a> is a
 technique for delaying a computationally or memory-intensive operation until
 it&rsquo;s absolutely necessary. It&rsquo;s helpful for getting an object&rsquo;s expensive
