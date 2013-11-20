@@ -11,6 +11,17 @@ body header {
   }
 }
 
+@media screen and (max-width: 640px) {
+  body header h2 a {
+    font-size: 0.4em;
+  }
+}
+
+
+body a {
+  text-decoration:none;
+}
+
 ul.main-navigation {
   display: inline;
   li {
@@ -19,10 +30,14 @@ ul.main-navigation {
     white-space: nowrap;
     form {
       float: left;
-      padding-left: 0;
+      padding-left: 0em;
+      margin-left: 0em;
       width: 95%;
     }
   }
+  li:first-child {
+    margin-left: -0.15em;    
+  }  
 }
 
 .twitter_profile  {
@@ -35,8 +50,10 @@ ul.main-navigation {
 
 .twitter_profile, .twitter_profile:hover  {
  display:block;
- width: 2em;
- margin-left: -0.25em;
+ float:right;
+ margin-top: -16px;
+ width: 48px;
+ height: auto;
  background-size: 100%;
 }
 
@@ -50,8 +67,12 @@ ul.main-navigation {
 
 .github_profile, .github_profile:hover {
  display:block;
- width: 2em;
- background-size: 60%;
+ float:right;
+ margin-top: -16px;
+ margin-right: -1.25em;
+ width: 50px;
+ height: auto;
+ background-size: 50%;
 }
 
 p, li {
