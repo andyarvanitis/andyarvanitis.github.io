@@ -8,13 +8,14 @@ categories:
 
 My [previous blog post](/lazy-initialization-for-objective-c) introduced a technique for
 [lazy initialization](http://en.wikipedia.org/wiki/Lazy_initialization) in Objective-C. 
-One of its main advantages is the simple way of using it -- instead of using `alloc`,
-`alloc-init` or `new` on a class to create an instance, you use class method `lazy`, which
-could be added to `NSObject` via a category. There is of course a big problem with adding any
-"nice and clean" method to any class you don't control (especially `NSObject`) -- name collisions.
-Categories are particularly nasty because, with a redefinition in another category, the version 
-you end up with isn't even predictable.
+Its main advantage is the simple way of using it: instead of sending `alloc` or `new` to a
+class to create an instance, you send `lazy`, which could be added to `NSObject` 
+via a category. 
 
+There is, of course, a big problem with adding a “nice and clean” method to 
+a class with a category, especially `NSObject` — and that’s silent name collisions. 
+To make matters worse, you can't even predict which method you'll end up with when multiple versions
+exist.
 The solution, as we all know, is to ~~uglify~~ try to make the name unique, typically by adding
 a prefix like "axa_", yielding something like `axa_lazy`. Yuck.
 
@@ -118,7 +119,7 @@ swizzling, etc. that any source file or library might have done in our executabl
 
 This is pretty good, but still not foolproof. I want to be extra-extra-careful (paranoid?). What if 
 someone sneaked in a version of the method not in the class itself, but a subclass? 
-Technically, it's a valid override, but I'm adding a method that that I want to ensure is a safe
+Technically, it's a valid override, but I'm adding a method that I want to ensure is a safe
 extension to the standard frameworks, with no unknown conflicts. The same goes for the superclasses
 up the inheritance chain -- what if I don't want to accidentally override anything here? 
 
