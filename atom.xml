@@ -4,7 +4,7 @@
   <title><![CDATA[Andy Arvanitis]]></title>
   <link href="http://andyarvanitis.com/atom.xml" rel="self"/>
   <link href="http://andyarvanitis.com/"/>
-  <updated>2013-11-20T20:41:14-08:00</updated>
+  <updated>2013-11-21T10:21:42-08:00</updated>
   <id>http://andyarvanitis.com/</id>
   <author>
     <name><![CDATA[Andy Arvanitis]]></name>
@@ -14,7 +14,7 @@
 
   
   <entry>
-    <title type="html"><![CDATA[Objective-C Safe Categories]]></title>
+    <title type="html"><![CDATA[Safe Categories for Objective-C]]></title>
     <link href="http://andyarvanitis.com/objective-c-safe-categories/"/>
     <updated>2013-11-20T11:47:00-08:00</updated>
     <id>http://andyarvanitis.com/objective-c-safe-categories</id>
