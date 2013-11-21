@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Objective-C Safe Categories"
+title: "Safe Categories for Objective-C"
 date: 2013-11-20 11:47
 comments: true
 categories: 
