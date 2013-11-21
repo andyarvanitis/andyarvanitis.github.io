@@ -129,6 +129,7 @@ rather than doing it manually.
 
     // File SafeCategories.h
     #import <Foundation/Foundation.h>
+    #import <objc/runtime.h>
 
     //---------------------------------------------------------------------------------------
     // Pseudo function that must be called in "category" +load method. 
@@ -244,7 +245,6 @@ rather than doing it manually.
 
 And as an example of how it's actually used, here's the original example rewritten:
 
-    #import <objc/runtime.h>
     #import "Object+AXALazyInitialization.h"
     #import "SafeCategories.h"
 
