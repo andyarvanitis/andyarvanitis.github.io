@@ -4,7 +4,7 @@
   <title><![CDATA[Andy Arvanitis]]></title>
   <link href="http://andyarvanitis.com/atom.xml" rel="self"/>
   <link href="http://andyarvanitis.com/"/>
-  <updated>2013-11-21T10:21:42-08:00</updated>
+  <updated>2013-11-21T10:35:57-08:00</updated>
   <id>http://andyarvanitis.com/</id>
   <author>
     <name><![CDATA[Andy Arvanitis]]></name>
@@ -147,6 +147,7 @@ rather than doing it manually.</p>
 
 <pre><code>// File SafeCategories.h
 #import &lt;Foundation/Foundation.h&gt;
+#import &lt;objc/runtime.h&gt;
 
 //---------------------------------------------------------------------------------------
 // Pseudo function that must be called in "category" +load method. 
@@ -263,8 +264,7 @@ static void process_methods(const Class sourceClass, const Class targetClass,
 
 <p>And as an example of how it&rsquo;s actually used, here&rsquo;s the original example rewritten:</p>
 
-<pre><code>#import &lt;objc/runtime.h&gt;
-#import "Object+AXALazyInitialization.h"
+<pre><code>#import "Object+AXALazyInitialization.h"
 #import "SafeCategories.h"
 
 @interface AXALazyInitCategory : NSObject // superclass is the category class
