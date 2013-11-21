@@ -114,8 +114,8 @@ of interest was:
 Cases 1 and 2 are pretty solid, but of course we can't rely on 3. Thus we need to do another check
 later, specifically in the function with the `destructor` attribute, which runs on program termination. 
 What happens here is we check the registered method implementation for the class again. If it's not 
-the one we added in this source file, we raise an error. This will catch any runtime method addition, 
-swizzling, etc. that any source file or library might have done in our executable.
+the one we added in this source file, we raise an error. This will catch any runtime method changes
+that any source file or library might have done in our executable.
 
 This is pretty good, but still not foolproof. I want to be extra-extra-careful (paranoid?). What if 
 someone sneaked in a version of the method not in the class itself, but a subclass? 
