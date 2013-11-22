@@ -205,9 +205,8 @@ rather than doing it manually.
         [relatedClasses addObject: superClass];
       }
       // Now get all subclasses of the base class
-      int count = objc_getClassList(NULL, 0);
-      Class* runtimeClasses = (__unsafe_unretained Class*)malloc(sizeof(Class) * count);
-      count = objc_getClassList(runtimeClasses, count);
+      unsigned int count = 0;
+      Class* runtimeClasses = objc_copyClassList(&count);
       for (NSInteger i = 0; i < count; i++) {
         Class superClass = runtimeClasses[i];
         do {
