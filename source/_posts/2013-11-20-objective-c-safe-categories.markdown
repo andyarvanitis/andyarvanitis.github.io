@@ -207,7 +207,7 @@ rather than doing it manually.
       // Now get all subclasses of the base class
       unsigned int count = 0;
       Class* runtimeClasses = objc_copyClassList(&count);
-      for (NSInteger i = 0; i < count; i++) {
+      for (unsigned int i = 0; i < count; i++) {
         Class superClass = runtimeClasses[i];
         do {
           superClass = class_getSuperclass(superClass);
