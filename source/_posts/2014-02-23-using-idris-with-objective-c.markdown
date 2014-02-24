@@ -6,7 +6,7 @@ comments: true
 categories: 
 ---
 
-I've recently been playing around with [idris](http://www.idris-lang.org/), a functional language in
+I've recently been playing around with [Idris](http://www.idris-lang.org/), a functional language in
 the [Haskell](http://www.haskell.org/haskellwiki/Haskell) family. I won't get into its design or features
 here, but I'll simply state that, unlike Haskell, it has dependent types and is evaluated eagerly
 (not lazily) by default. It offers a simple FFI to C, so I was curious what integration with Objective-C 
