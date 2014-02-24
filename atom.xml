@@ -4,7 +4,7 @@
   <title><![CDATA[Andy Arvanitis]]></title>
   <link href="http://andyarvanitis.com/atom.xml" rel="self"/>
   <link href="http://andyarvanitis.com/"/>
-  <updated>2014-02-23T17:56:06-08:00</updated>
+  <updated>2014-02-23T21:34:18-08:00</updated>
   <id>http://andyarvanitis.com/</id>
   <author>
     <name><![CDATA[Andy Arvanitis]]></name>
@@ -18,7 +18,7 @@
     <link href="http://andyarvanitis.com/using-idris-with-objective-c/"/>
     <updated>2014-02-23T15:00:00-08:00</updated>
     <id>http://andyarvanitis.com/using-idris-with-objective-c</id>
-    <content type="html"><![CDATA[<p>I&rsquo;ve recently been playing around with <a href="http://www.idris-lang.org/">idris</a>, a functional language in
+    <content type="html"><![CDATA[<p>I&rsquo;ve recently been playing around with <a href="http://www.idris-lang.org/">Idris</a>, a functional language in
 the <a href="http://www.haskell.org/haskellwiki/Haskell">Haskell</a> family. I won&rsquo;t get into its design or features
 here, but I&rsquo;ll simply state that, unlike Haskell, it has dependent types and is evaluated eagerly
 (not lazily) by default. It offers a simple FFI to C, so I was curious what integration with Objective-C
