@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>
+    <url>
+        <loc>http://andyarvanitis.com/lazy-initialization-for-objective-c/</loc>
+        <lastmod>2013-11-21T21:56:13-08:00</lastmod>
+    </url>
+    <url>
+        <loc>http://andyarvanitis.com/objective-c-safe-categories/</loc>
+        <lastmod>2013-11-21T21:56:13-08:00</lastmod>
+    </url>
+    <url>
+        <loc>http://andyarvanitis.com/using-idris-with-objective-c/</loc>
+        <lastmod>2014-02-23T21:32:33-08:00</lastmod>
+    </url>
+    <url>
+        <loc>http://andyarvanitis.com/404.html</loc>
+        <lastmod>2013-11-03T17:14:48-08:00</lastmod>
+    </url>
+    <url>
+        <loc>http://andyarvanitis.com/archives/</loc>
+        <lastmod>2014-02-23T21:32:33-08:00</lastmod>
+    </url>
+    <url>
+        <loc>http://andyarvanitis.com/</loc>
+        <lastmod>2014-02-23T21:32:33-08:00</lastmod>
+    </url>
+</urlset>

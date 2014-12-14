@@ -1,0 +1,500 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Using Idris with Objective-C - Andy Arvanitis</title>
+  <meta name="author" content="Andy Arvanitis">
+
+  
+  <meta name="description" content="I&rsquo;ve recently been playing around with Idris, a functional language in
+the Haskell family. I won&rsquo;t get into its design or features
+here, &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://andyarvanitis.com/using-idris-with-objective-c">
+  <link href="/favicon.ico" rel="icon">
+  
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="/javascripts/ender.js"></script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="http://feeds.feedburner.com/AndyArvanitis" rel="alternate" title="Andy Arvanitis" type="application/atom+xml">
+  <link type="text/css" rel="stylesheet" href="http://fast.fonts.net/cssapi/f55520d6-4a35-47fc-865a-a7225369bb75.css"/>
+<script src="https://google-code-prettify.googlecode.com/svn/loader/run_prettify.js"></script>
+<script src="https://google-code-prettify.googlecode.com/svn/loader/lang-hs.js"></script>
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+<script type='text/javascript'>
+  $(function() {
+    // add prettyprint class to all <pre><code></code></pre> blocks
+    var prettify = false;
+    $("pre code").parent().each(function() {
+        $(this).addClass('prettyprint');
+        prettify = true;
+    });
+    if ( prettify ) {
+        $.getScript("https://google-code-prettify.googlecode.com/svn/loader/prettify.js", function() { prettyPrint() });
+    }
+  });
+</script>
+
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-21151919-2']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   class="no-sidebar"  >
+  <header role="banner"><hgroup>
+  <h2><a href="/">Andy Arvanitis</a></h2>
+
+  <a href="http://github.com/andyarvanitis" class="github_profile">&nbsp;</a>
+  <a href="http://twitter.com/andyarvanitis" class="twitter_profile">&nbsp;</a>
+
+<!--   <h1>Andy Arvanitis</h1>
+  
+ -->
+</hgroup>
+
+
+</header>
+  <nav role="navigation">
+  
+
+<ul class="main-navigation">
+
+  <li>
+  <span>
+    <form action="http://google.com/search" method="get">
+      <fieldset role="search">
+        <input type="hidden" name="q" value="site:andyarvanitis.com" />
+        <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+      </fieldset>
+    </form>
+	</span>
+  </li>
+  <li><a href="/archives">Archives</a></li>
+  <li><a href="http://feeds.feedburner.com/AndyArvanitis/">RSS</a></li>
+  <li><a href="http://eerolanguage.org">eerolanguage.org</a></li>
+</ul>
+
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Using Idris With Objective-C</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2014-02-23T15:00:00-08:00" pubdate data-updated="true">February 23 2014</time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>I&rsquo;ve recently been playing around with <a href="http://www.idris-lang.org/">Idris</a>, a functional language in
+the <a href="http://www.haskell.org/haskellwiki/Haskell">Haskell</a> family. I won&rsquo;t get into its design or features
+here, but I&rsquo;ll simply state that, unlike Haskell, it has dependent types and is evaluated eagerly
+(not lazily) by default. It offers a simple FFI to C, so I was curious what integration with Objective-C
+would look like. I haven&rsquo;t found any examples of that, so I thought I&rsquo;d give it a try and share
+my results.</p>
+
+<p>One note: although Idris offers an LLVM backend, I only used the default C backend for this exercise.</p>
+
+<p>My general strategy was to use the Objective-C runtime functions via the FFI, and to define Idris
+types to keep the operations as type-safe as possible.</p>
+
+<h2>Basics</h2>
+
+<p>I started with just the basics &mdash; getting access to Objective-C classes and selectors:</p>
+
+<!--?prettify lang=hs?-->
+
+
+<pre><code>module objective_c
+
+%include C "objc/runtime.h"
+%include C "objc_stubs.h"
+
+-------------------------------------------------------------------------------
+class Object a where
+   getPtr : a -&gt; IO Ptr
+
+-------------------------------------------------------------------------------
+getClass : String -&gt; IO Ptr
+-------------------------------------------------------------------------------
+getClass name = mkForeign (FFun "objc_getClass" [FString] FPtr) name
+
+-------------------------------------------------------------------------------
+getSelector : String -&gt; IO Ptr
+-------------------------------------------------------------------------------
+getSelector selname = mkForeign (FFun "sel_registerName" [FString] FPtr) selname 
+</code></pre>
+
+<p>This is a module defining an <code>Object</code> typeclass and two functions: one for getting classes and one for
+getting selectors from the runtime. Idris&#8217; FFI defines a <code>Ptr</code> type, which represents, as you would expect,
+a general (<code>void *</code>) C pointer. Every Objective-C object type in this exercise is an instance of
+the <code>Object</code> typeclass, including classes themselves (more later), and function <code>getPtr</code> is used to
+retrieve the underlying foreign pointer when needed. Like function/method calls to Objective-C, and
+C function calls in general, the retrieval of the pointer is IO monadic.</p>
+
+<p>Also note the <code>%include</code> statements, which directly parse C headers. I ran into some problems
+with the type signatures of a couple of functions, so I created stubs. The stub prototype used in
+this example module is:</p>
+
+<pre><code>extern void* objc_msgSend(void* self, void* op, ...);
+</code></pre>
+
+<p>It should be possible to get rid of at least some of these stubs.</p>
+
+<h2>Objective-C classes</h2>
+
+<p>Next up is an example of a specific Objective-C class. I started off with <code>NSObject</code>, putting it in its own
+module:</p>
+
+<!--?prettify lang=hs?-->
+
+
+<pre><code>module NSObject
+
+import objective_c
+
+-------------------------------------------------------------------------------
+data NSObject'Class = Metaclass
+
+instance Object NSObject'Class where
+   getPtr o = getClass "NSObject"
+
+-------------------------------------------------------------------------------
+metaclass : IO NSObject'Class
+-------------------------------------------------------------------------------
+metaclass = return Metaclass
+
+-------------------------------------------------------------------------------
+record NSObject : Type where
+   asObject : (pointer : Ptr) -&gt; NSObject
+
+instance Object NSObject where
+   getPtr o = return (pointer o)
+</code></pre>
+
+<p>The type <code>NSObject'Class</code> represents the type of the class itself &mdash; more precisely, in Objective-C terms, an instance of the object&rsquo;s metaclass. In other words, it&rsquo;s used to invoke class methods. To
+get the metaclass instance, call the IO monadic <code>metaclass</code> function. Finally, type
+<code>NSObject</code> represents an object, or instance of the objc class, used to invoke instance methods. You can
+also see the for-internal-use implementations of <code>getPtr</code>.</p>
+
+<p>I didn&rsquo;t bother to define any objc class or instance methods for <code>NSObject</code> here. Instead,
+I&rsquo;ll pick a more interesting example: <code>NSString</code>.</p>
+
+<h2>NSString</h2>
+
+<p>I&rsquo;ve fleshed out a few methods for <code>NSString</code> below so you&rsquo;ll be able to see a workable and
+hopefully slightly interesting &ldquo;hello, world&rdquo; (what else?) example.</p>
+
+<p>You might notice that the object arguments for each function (method) appear last. This allows the
+convenient use of Idris&#8217; bind operator, <code>&gt;&gt;=</code>, when calling them. You&rsquo;ll see examples of this
+in the final code snippet. I got the idea from the
+<a href="http://hoc.sourceforge.net/">HOC Haskell to Objective-C bindings</a>.</p>
+
+<p>Idris provides a way to define functions for doing implicit type conversions. This is handy for safely using
+our objc objects with superclass object functions (methods). Function <code>asNSObject</code> below
+illustrates how we can do this.</p>
+
+<p>Another thing to note is Idris&#8217; facility for named parameters/arguments, as seen in the definition
+of function <code>stringByReplacingOccurrencesOfString</code> below. In the final code snippet, I&rsquo;ll show how it&rsquo;s used.</p>
+
+<!--?prettify lang=hs?-->
+
+
+<pre><code>module NSString
+
+import objective_c
+import NSObject 
+import NSRange
+
+-------------------------------------------------------------------------------
+data NSString'Class = Metaclass
+
+instance Object NSString'Class where
+   getPtr o = getClass "NSString"
+
+-------------------------------------------------------------------------------
+metaclass : IO NSString'Class
+-------------------------------------------------------------------------------
+metaclass = return Metaclass
+
+-------------------------------------------------------------------------------
+record NSString : Type where
+   asObject : (pointer : Ptr) -&gt; NSString
+
+instance Object NSString where
+   getPtr o = return (pointer o)
+
+-------------------------------------------------------------------------------
+implicit asNSObject : NSString -&gt; NSObject
+-------------------------------------------------------------------------------
+asNSObject o = NSObject.asObject (NSString.pointer o)
+
+-------------------------------------------------------------------------------
+implicit liftNSString : NSString -&gt; IO NSString
+-------------------------------------------------------------------------------
+liftNSString s = return s
+
+-------------------------------------------------------------------------------
+--------------------------- Class methods -------------------------------------
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+stringWithUTF8String : String -&gt; NSString'Class -&gt; IO NSString
+-------------------------------------------------------------------------------
+stringWithUTF8String s c = do 
+   obj &lt;- getPtr c
+   sel &lt;- getSelector "stringWithUTF8String:" 
+   result &lt;- mkForeign (FFun "objc_msgSend" [FPtr, FPtr, FString] FPtr) 
+                                             obj   sel   s
+   return (asObject result)
+
+-------------------------------------------------------------------------------
+--------------------------- Instance methods ----------------------------------
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+length : NSString -&gt; IO Int
+-------------------------------------------------------------------------------
+length o = do 
+   obj &lt;- getPtr o
+   sel &lt;- getSelector "length" 
+   mkForeign (FFun "objc_msgSend" [FPtr, FPtr] FInt) obj sel
+
+-------------------------------------------------------------------------------
+UTF8String : NSString -&gt; IO String
+-------------------------------------------------------------------------------
+UTF8String o = do 
+   obj &lt;- getPtr o
+   sel &lt;- getSelector "UTF8String" 
+   mkForeign (FFun "objc_msgSend" [FPtr, FPtr] FString) obj sel
+
+-------------------------------------------------------------------------------
+stringByReplacingOccurrencesOfString : NSString -&gt; (withString : NSString) -&gt;
+                                       NSString -&gt; 
+                                       IO NSString
+-------------------------------------------------------------------------------
+stringByReplacingOccurrencesOfString s r o = do 
+   obj &lt;- getPtr o
+   sel &lt;- getSelector "stringByReplacingOccurrencesOfString:withString:"
+   old &lt;- getPtr s
+   new &lt;- getPtr r
+   result &lt;- mkForeign (FFun "objc_msgSend" [FPtr, FPtr, FPtr, FPtr] FPtr) 
+                                             obj   sel   old   new      
+   return (asObject result)
+
+-------------------------------------------------------------------------------
+substringWithRange : NSRange -&gt; NSString -&gt; IO NSString
+-------------------------------------------------------------------------------
+substringWithRange (NSMakeRange loc len) o = do
+   obj &lt;- getPtr o
+   sel &lt;- getSelector "substringWithRange:"
+   result &lt;- mkForeign (FFun "objc_msgSend" [FPtr, FPtr, FInt, FInt] FPtr) 
+                                             obj   sel   loc   len      
+   return (asObject result)
+</code></pre>
+
+<h2>Hello, world</h2>
+
+<p>Putting it all together, we can now get a functioning Objective-C/Foundation example.</p>
+
+<!--?prettify lang=hs?-->
+
+
+<pre><code>module Main
+
+import NSString
+import NSFunctions
+
+-------------------------------------------------------------------------------
+%lib C "objc" 
+%link C "/System/Library/Frameworks/Foundation.framework/Foundation" 
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+main : IO () 
+-------------------------------------------------------------------------------
+main = do
+
+   recipient &lt;- NSString.metaclass &gt;&gt;= stringWithUTF8String "world" 
+   separator &lt;- NSString.metaclass &gt;&gt;= stringWithUTF8String ", " 
+
+   greeting &lt;- NSString.metaclass &gt;&gt;= 
+                  stringWithUTF8String "hello" &gt;&gt;=
+                     stringByAppendingString separator &gt;&gt;=
+                        stringByAppendingString recipient
+
+   format &lt;- NSString.metaclass &gt;&gt;= stringWithUTF8String "%@!"
+
+   NSLog format greeting
+
+   replacement &lt;- NSString.metaclass &gt;&gt;= stringWithUTF8String "everyone" 
+
+   greeting &lt;- greeting &gt;&gt;= stringByReplacingOccurrencesOfString recipient {withString = replacement}
+
+   NSLog format greeting
+
+   substr &lt;- greeting &gt;&gt;= substringWithRange (NSMakeRange 7 5)
+
+   substrLen &lt;- substr &gt;&gt;= length -- alternatively, "length substr"
+
+   substring &lt;- substr &gt;&gt;= UTF8String -- alternatively, "UTF8String substr"
+
+   -- 'substring' is now a regular Idris string, and 'substrLen' is an Int
+   putStrLn $ "Substring: " ++ substring
+   putStrLn $ "Length: " ++ show substrLen   
+
+   return ()
+</code></pre>
+
+<p>The output:</p>
+
+<pre><code>2014-02-23 14:50:37.209 hello[1622:507] hello, world!
+2014-02-23 14:50:37.210 hello[1622:507] hello, everyone!
+Substring: every
+Length: 5
+</code></pre>
+
+<p>I intentionally use Idris&#8217; <code>&gt;&gt;=</code> bind in this code. I believe this works pretty well, overall.
+You get something reminiscent of Objective-C message passing, you get nice chaining,
+and you stick with idiomatic Idris monad conventions. Idris does allow some really cool
+user-defined syntax extensions, so if you wanted, you could actually do something like this:</p>
+
+<pre><code>term syntax "[" [o] [s1] ":" [arg1] [s2] ":" [arg2] "]" = (return o) &gt;&gt;= (s1 arg1 {s2 = arg2})
+
+...
+
+greeting &lt;- [greeting stringByReplacingOccurrencesOfString: recipient 
+                                                withString: replacement]
+</code></pre>
+
+<p>This would effectively give you an EDSL for some very familiar-looking Objective-C code. As tempting
+as something like this is, I would probably stay with an all- <code>&gt;&gt;=</code> approach.</p>
+
+<h2>Final thoughts</h2>
+
+<p>If you wanted to use standard Objective-C frameworks directly&mdash;i.e., not just a couple of adapter
+classes&mdash;you probably wouldn&rsquo;t want to code the bindings by hand. You would want a utility to
+parse the headers and generate something that looks like the <code>NSString</code> module example. This
+shouldn&rsquo;t be too hard to do, actually. For example, given my experiences with
+<a href="https://github.com/eerolanguage/eero/wiki/Translator">eero&rsquo;s source-to-source translator</a>,
+clang&rsquo;s rewriting facilities could probably handle it well. There would also be some work
+involved in getting things like memory management, returned structs, variadic functions, etc.
+working seamlessly.</p>
+
+<p>Also note that this is a contrived example. A good binding library would have more seamless
+support for common conversions like native strings to/from Objective-C strings. And of course
+you would want to do most of your string (or any other data) manipulations in Idris&#8217; pure
+functional world and just get the results over to Objective-C. This was just a
+convenient example.</p>
+
+<p>You can find all of this sample code on <a href="https://github.com/andyarvanitis/IdrisObjCExperiment">github</a>.</p>
+
+<p>Please feel free to
+<a href="https://twitter.com/intent/tweet?text=@andyarvanitis%20RE:%20idris%2Dobjc%20">provide feedback via Twitter</a>.</p>
+</div>
+
+
+
+  <footer>
+    <p class="meta">
+
+      
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://andyarvanitis.com/using-idris-with-objective-c/" data-via="andyarvanitis" data-counturl="http://andyarvanitis.com/using-idris-with-objective-c/" data-text="“Using Idris with Objective-C”">Tweet</a>
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/objective-c-safe-categories/" title="Previous Post: Safe Categories for Objective-C">&laquo; Safe Categories for Objective-C</a>
+      
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2014 - Andy Arvanitis -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>
