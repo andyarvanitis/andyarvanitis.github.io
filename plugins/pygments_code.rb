@@ -12,7 +12,8 @@ module HighlightCode
     lang = 'perl' if lang == 'pl'
     lang = 'yaml' if lang == 'yml'
     str = pygments(str, lang).match(/<pre>(.+)<\/pre>/m)[1].to_s.gsub(/ *$/, '') #strip out divs <div class="highlight">
-    tableize_code(str, lang)
+    '<div class="highlight"><pre class="code"><code class = "#{lang}">' + str + '</code></pre></div>'
+    # tableize_code(str, lang)
   end
 
   def pygments(code, lang)

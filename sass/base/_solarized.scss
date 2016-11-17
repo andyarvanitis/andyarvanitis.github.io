@@ -1,4 +1,4 @@
-$base03:          #161616 !default; //darkest blue
+$base03:          #161616; //darkest blue
 $base02:          #161616 !default; //dark blue
 $base01:          #93959a !default; //darkest gray
 $base00:          #657b83 !default; //dark gray
@@ -28,7 +28,7 @@ $solarized: dark !default;
   $_base2:  $base2;
   $_base3:  $base3;
 
-  $base03:  $_base3;
+  $base03:  #ffffff;
   $base02:  $_base2;
   $base01:  $_base1;
   $base00:  $_base0;
