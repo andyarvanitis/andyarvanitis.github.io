@@ -4,7 +4,7 @@
   <title><![CDATA[Andy Arvanitis]]></title>
   <link href="http://andyarvanitis.com/atom.xml" rel="self"/>
   <link href="http://andyarvanitis.com/"/>
-  <updated>2014-12-14T11:21:36-08:00</updated>
+  <updated>2016-11-16T19:58:24-08:00</updated>
   <id>http://andyarvanitis.com/</id>
   <author>
     <name><![CDATA[Andy Arvanitis]]></name>
@@ -12,6 +12,125 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[“Hello, world” with PureScript C++]]></title>
+    <link href="http://andyarvanitis.com/hello-world-purescript-cpp/"/>
+    <updated>2016-11-16T13:36:00-08:00</updated>
+    <id>http://andyarvanitis.com/hello-world-purescript-cpp</id>
+    <content type="html"><![CDATA[<p>This is a short-as-possible demonstration of using <a href="https://github.com/pure11/pure11">PureScript&rsquo;s C++11 backend</a> (a.k.a. pure11) to build a native command-line application.</p>
+
+<p>To keep things simple, in this post I&rsquo;ll assume:</p>
+
+<ul>
+<li>You&rsquo;re running macOS El Capitan (10.11) or later</li>
+<li>You&rsquo;re already familiar with PureScript, and have a recent version installed</li>
+<li>You have either a recent version of Xcode (7.3+) or its command-line tools installed (<code>git</code>, <code>clang</code>, and <code>make</code> need to be there)</li>
+</ul>
+
+
+<p>I&rsquo;ll go through the steps, and then provide a few extra details afterwards.</p>
+
+<p><strong>Step 1: Install the PureScript-to-C++11 compiler,</strong> <code>pcc</code></p>
+
+<ol>
+<li>Go to the <a href="https://github.com/pure11/pure11/releases">pure11 repo releases</a> and download the latest <code>pcc.zip</code> file</li>
+<li>Unzip and copy to a location on your path</li>
+</ol>
+
+
+<p><strong>Step 2: Write your “hello, world” program</strong></p>
+
+<ol>
+<li>Make a working directory anywhere you like, named anything you like</li>
+<li>Make a subdirectory there called “<code>src</code>”</li>
+<li>Create your source file in <code>src</code> with contents:</li>
+</ol>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><pre class="code"><code class = "#{lang}"><span class="kr">module</span> <span class="nn">Main</span> <span class="kr">where</span>
+
+<span class="kr">import</span> <span class="nn">Prelude</span>
+<span class="kr">import</span> <span class="nn">Control.Monad.Eff</span> <span class="p">(</span><span class="kt">Eff</span><span class="p">)</span>
+<span class="kr">import</span> <span class="nn">Control.Monad.Eff.Console</span> <span class="p">(</span><span class="kt">CONSOLE</span><span class="p">,</span> <span class="nf">log</span><span class="p">)</span>
+
+<span class="nf">main</span> <span class="ow">::</span> <span class="kt">Eff</span> <span class="p">(</span><span class="n">console</span> <span class="ow">::</span> <span class="kt">CONSOLE</span><span class="p">)</span> <span class="kt">Unit</span>
+<span class="nf">main</span> <span class="ow">=</span> <span class="kr">do</span>
+<span class="nf">log</span> <span class="s">&quot;hello, world!&quot;</span>
+</code></pre></div></figure>
+
+
+<p><strong>Step 3: Generate configuration files (</strong><code>Makefile</code> <strong>and</strong> <code>psc-package.json</code><strong>)</strong></p>
+
+<p>From your working directory run the <code>pcc</code> command with no arguments:</p>
+
+<pre><code>$ pcc
+</code></pre>
+
+<p>You should see something like:</p>
+
+<pre><code>Generating Makefile... pcc executable location /Users/andy/.local/bin/pcc
+Done
+
+Run 'make' or 'make release' to build an optimized release build.
+Run 'make debug' to build an executable with assertions enabled and
+suitable for source-level debugging.
+
+The resulting binary executable will be located in output/bin (by default).
+</code></pre>
+
+<p><strong>Step 4: Build and run</strong></p>
+
+<ol>
+<li><p>Again from your working directory, run the <code>make</code> command:</p>
+
+<pre><code> $ make
+</code></pre>
+
+<p> You should see something like:</p>
+
+<pre><code> Getting packages using 'psc-package'...
+ Updating 3 packages...
+ Updating console
+ Updating eff
+ Updating prelude
+ Update complete
+ ...
+ Compiling Data.NaturalTransformation
+ Compiling Data.Show
+ Compiling Data.Boolean
+ Compiling Control.Semigroupoid
+ Compiling Control.Category
+ Compiling Data.Void
+ Compiling Data.Unit
+ ...
+ Compiling Main
+ Creating output/Control/Applicative/Applicative.o
+ Creating output/Control/Apply/Apply.o
+ Creating output/Control/Apply/Apply_ffi.o
+ Creating output/Control/Bind/Bind.o
+ ...
+ Linking output/bin/main
+</code></pre></li>
+<li><p>Run your new program:</p>
+
+<pre><code>$ ./output/bin/main 
+hello, world!
+</code></pre></li>
+</ol>
+
+
+<p>And that&rsquo;s it!</p>
+
+<p><strong>Next steps</strong></p>
+
+<p>As you make any changes to your source (<code>.purs</code>) file(s), simply run <code>make</code> again to rebuild.</p>
+
+<p>Using PureScript&rsquo;s new <code>psc-package</code> utility, you can install more packages (libraries of modules) from a verified package set.</p>
+
+<p>This is by no means the only thing you can do with the tools, nor is it the only plaform supported &mdash; I regularly test on Linux (gcc) and occasionally Windows 10 (Visual Studio 2015) &mdash; but it should give you the basics of getting up and running.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Using Idris with Objective-C]]></title>

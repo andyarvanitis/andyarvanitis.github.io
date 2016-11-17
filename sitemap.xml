@@ -2,26 +2,30 @@
 <urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>
     <url>
         <loc>http://andyarvanitis.com/lazy-initialization-for-objective-c/</loc>
-        <lastmod>2014-12-14T11:16:02-08:00</lastmod>
+        <lastmod>2016-11-14T11:21:03-08:00</lastmod>
     </url>
     <url>
         <loc>http://andyarvanitis.com/objective-c-safe-categories/</loc>
-        <lastmod>2014-12-14T11:16:02-08:00</lastmod>
+        <lastmod>2016-11-14T11:21:03-08:00</lastmod>
     </url>
     <url>
         <loc>http://andyarvanitis.com/using-idris-with-objective-c/</loc>
-        <lastmod>2014-12-14T11:16:02-08:00</lastmod>
+        <lastmod>2016-11-16T17:28:44-08:00</lastmod>
+    </url>
+    <url>
+        <loc>http://andyarvanitis.com/hello-world-purescript-cpp/</loc>
+        <lastmod>2016-11-16T19:45:51-08:00</lastmod>
     </url>
     <url>
         <loc>http://andyarvanitis.com/404.html</loc>
-        <lastmod>2014-12-14T11:16:02-08:00</lastmod>
+        <lastmod>2016-11-14T11:21:03-08:00</lastmod>
     </url>
     <url>
         <loc>http://andyarvanitis.com/archives/</loc>
-        <lastmod>2014-12-14T11:16:02-08:00</lastmod>
+        <lastmod>2016-11-16T19:45:51-08:00</lastmod>
     </url>
     <url>
         <loc>http://andyarvanitis.com/</loc>
-        <lastmod>2014-12-14T11:16:02-08:00</lastmod>
+        <lastmod>2016-11-16T19:45:51-08:00</lastmod>
     </url>
 </urlset>
