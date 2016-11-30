@@ -5,7 +5,7 @@
 <!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
 <head>
   <meta charset="utf-8">
-  <title>Andy Arvanitis</title>
+  <title>iOS (and macOS) with PureScript C++ - Andy Arvanitis</title>
   <meta name="author" content="Andy Arvanitis">
 
   
@@ -18,7 +18,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   
-  <link rel="canonical" href="http://andyarvanitis.com">
+  <link rel="canonical" href="http://andyarvanitis.com/ios-with-purescript-c-plus-plus">
   <link href="/favicon.ico" rel="icon">
   
   <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
@@ -98,15 +98,12 @@
 </nav>
   <div id="main">
     <div id="content">
-      <div class="blog-index">
+      <div>
+<article class="hentry" role="article">
   
-  
-  
-    <article>
-      
   <header>
     
-      <h1 class="entry-title"><a href="/ios-with-purescript-c-plus-plus/">iOS (and macOS) With PureScript C++</a></h1>
+      <h1 class="entry-title">iOS (and macOS) With PureScript C++</h1>
     
     
       <p class="meta">
@@ -129,7 +126,7 @@
   </header>
 
 
-  <div class="entry-content"><p>Thanks to Xcode&rsquo;s support for custom script build phases and environment variables compatible with GNU Make, you can integrate your PureScript code fairly painlessly. In this post I&rsquo;ll show you the basics of using PureScript in an Xcode project. I&rsquo;m just going to focus on that, so you won&rsquo;t get any details on things like the (bidirectional) FFI here &mdash; I plan to cover that in another post.</p>
+<div class="entry-content"><p>Thanks to Xcode&rsquo;s support for custom script build phases and environment variables compatible with GNU Make, you can integrate your PureScript code fairly painlessly. In this post I&rsquo;ll show you the basics of using PureScript in an Xcode project. I&rsquo;m just going to focus on that, so you won&rsquo;t get any details on things like the (bidirectional) FFI here &mdash; I plan to cover that in another post.</p>
 
 <p>To keep things simple, in this post I&rsquo;ll assume:</p>
 
@@ -328,27 +325,37 @@ The resulting binary executable will be located in output/bin (by default).
 
 <p>If you take a peek at the <code>psc-xcode.sh</code> script, you&rsquo;ll see that your compiled PureScript C++ objects will respect your project settings for things like Debug/Release builds and target architecture &mdash; and will rebuild appropriately if any of these things change. This also means you can do device hardware builds; as with any normal iOS project, simply change your target to one of the device variants and build.</p>
 </div>
-  <div class="sharing">
+
+
+
+  <footer>
+    <p class="meta">
+
+      
+
+
+    </p>
+    
+      <div class="sharing">
   
   <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://andyarvanitis.com/ios-with-purescript-c-plus-plus/" data-via="andyarvanitis" data-counturl="http://andyarvanitis.com/ios-with-purescript-c-plus-plus/" data-text="“iOS (and macOS) with PureScript C++”">Tweet</a>
   
+  
+  
 </div>
 
-  
-  
-
-
-
-    </article>
-  
-  <div class="pagination">
     
-      <a class="prev" href="/page/2/">&larr; Older</a>
-    
-    <a href="/archives">Blog Archives</a>
-    
-  </div>
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/hello-world-purescript-cpp/" title="Previous Post: “Hello, world” with PureScript C++">&laquo; “Hello, world” with PureScript C++</a>
+      
+      
+    </p>
+  </footer>
+</article>
+
 </div>
+
 
     </div>
   </div>
