@@ -140,9 +140,13 @@
 
 <p>These instructions should apply to all Xcode-based targets, although I&rsquo;ve only tested iOS and macOS for now.</p>
 
-<p><strong>Step 1: Install the PureScript C++ compiler</strong></p>
+<p><strong>Step 1: Install the PureScript-to-C++11 compiler,</strong> <code>pcc</code></p>
 
-<p>See <a href="/hello-world-purescript-cpp/">my previous post</a>, but for proper operation with Xcode, make sure the <code>pcc</code> program is installed in the same directory as the other PureScript utilities (particulary <code>psc-package</code>). This restriction might be removed later. Also be sure to use a version dated <strong>2016-11-22</strong> or later, since that&rsquo;s when direct support for Xcode was added.</p>
+<ol>
+<li>Go to the <a href="https://github.com/pure11/pure11/releases">pure11 repo releases</a> and download the latest <code>pcc.zip</code> file. If you already have a version installed, be sure to use a version dated <strong>2016-11-22</strong> or later, since that&rsquo;s when extra support for Xcode was added.</li>
+<li>Unzip and copy to the same directory you installed other PureScript utilities (particulary <code>psc-package</code>). This restriction might be removed later.</li>
+</ol>
+
 
 <p><strong>Step 2: Create a new Xcode iOS project in the standard way</strong></p>
 
