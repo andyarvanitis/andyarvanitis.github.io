@@ -179,5 +179,5 @@ using PMath::fib;
 
 You can now proceed to make changes to any source files (including your PureScript ones) and simply rebuild/test/repeat using Xcode. As you're developing your app, if you just want to type check your PureScript changes (not recompile all the way to a binary target), use Terminal to run "`make codegen`" from your working directory.
 
-If you take a peek at the `psc-xcode.sh` script, you'll see that your compiled PureScript C++ objects will respect your project settings for things like Debug/Release builds and target architecture -- and will rebuild appropriately if any of these things change. This also means you can do device hardware builds; as with any normal iOS project, simply change your target to one of the device variants and build. Try it!
+If you take a peek at the `psc-xcode.sh` script, you'll see that your compiled PureScript C++ objects will respect your project settings for things like Debug/Release builds and target architecture -- and will rebuild appropriately if any of these things change. This also means you can do device hardware builds; as with any normal iOS project, simply change your target to one of the device variants and build.
 
