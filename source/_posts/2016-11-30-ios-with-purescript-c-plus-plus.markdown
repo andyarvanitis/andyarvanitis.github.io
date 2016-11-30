@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "iOS (and macOS) with PureScript C++"
-date: 2016-11-20 11:34
+date: 2016-11-30 9:34
 comments: true
 categories: 
 ---
@@ -19,7 +19,7 @@ These instructions should apply to all Xcode-based targets, although I've only t
 
 **Step 1: Install the PureScript C++ compiler**
 
-See [my previous post](/hello-world-purescript-cpp/), but for proper operation with Xcode, make sure the `pcc` program is installed in the same directory as the other PureScript utilities (particulary `psc-package`). This restriction might be removed later. Also be sure to use a version dated **2016-11-20** or later, since that's when direct support for Xcode was added.
+See [my previous post](/hello-world-purescript-cpp/), but for proper operation with Xcode, make sure the `pcc` program is installed in the same directory as the other PureScript utilities (particulary `psc-package`). This restriction might be removed later. Also be sure to use a version dated **2016-11-22** or later, since that's when direct support for Xcode was added.
 
 **Step 2: Create a new Xcode iOS project in the standard way**
 
@@ -101,11 +101,11 @@ The resulting binary executable will be located in output/bin (by default).
       
       {% img /images/run_script.png %}
 
-2. Now go to the "Build Settings" tab. Using the embedded search control (upper right), enter "header search". If you don't see any results, make sure you have the "All" button selected (instead of "Basic" or "Customized"). Select the "Header Search Paths" item and add the value "`path/to/your/working_dir/output`" to it. Refer to this screenshot. Make sure to press "return" to save the value.
+2. Now go to the "Build Settings" tab. Using the embedded search control (upper right), enter "header search". If you don't see any results, make sure you have the "All" button selected (instead of "Basic" or "Customized"). Select the "Header Search Paths" item and add the value "`path/to/your/working_dir/output`" to it, meaning the "`output`" subdirectory in your working directory (it doesn't exist yet, but it will be generated during the build process). Make sure to press "return" to save the value.
 
       {% img /images/search_paths.png %}
 
-3. Again from "Build Settings," change your search term to "linker flags" to find "Other Linker Flags." Add the values "`-lc++ path/to/your/working_dir/output/bin/purescript.o`", as shown below. Again, remember to press "return".
+3. Again from "Build Settings," change your search term to "linker flags" to find "Other Linker Flags." Add the values<br>"`-lc++ path/to/your/working_dir/output/bin/purescript.o`", as shown below. This "`.o`" file is a native combined object file containing all of your compiled PureScript modules (sort of like a static lib), which will be generated during the build process. Again, remember to press "return".
 
       {% img /images/linker_flags.png %}
 
