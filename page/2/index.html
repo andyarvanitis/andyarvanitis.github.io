@@ -9,7 +9,7 @@
   <meta name="author" content="Andy Arvanitis">
 
   
-  <meta name="description" content="This is a short-as-possible demonstration of using PureScript&rsquo;s C++11 backend (a.k.a. pure11) to build a native command-line application. To &hellip;">
+  <meta name="description" content="Thanks to Xcode&rsquo;s support for custom script build phases and environment variables compatible with GNU Make, you can integrate your PureScript &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -106,7 +106,7 @@
       
   <header>
     
-      <h1 class="entry-title"><a href="/hello-world-purescript-cpp/">“Hello, World” With PureScript C++</a></h1>
+      <h1 class="entry-title"><a href="/ios-with-purescript-c-plus-plus/">iOS (and macOS) With PureScript C++</a></h1>
     
     
       <p class="meta">
@@ -122,128 +122,219 @@
   
 
 
-<time datetime="2016-11-16T13:36:00-08:00" pubdate data-updated="true">November 16 2016</time>
+<time datetime="2016-11-30T09:34:00-08:00" pubdate data-updated="true">November 30 2016</time>
         
       </p>
     
   </header>
 
 
-  <div class="entry-content"><p>This is a short-as-possible demonstration of using <a href="https://github.com/pure11/pure11">PureScript&rsquo;s C++11 backend</a> (a.k.a. pure11) to build a native command-line application.</p>
+  <div class="entry-content"><p>Thanks to Xcode&rsquo;s support for custom script build phases and environment variables compatible with GNU Make, you can integrate your PureScript code fairly painlessly. In this post I&rsquo;ll show you the basics of using PureScript in an Xcode project. I&rsquo;m just going to focus on that, so you won&rsquo;t get any details on things like the (bidirectional) FFI here &mdash; I plan to cover that in another post.</p>
 
 <p>To keep things simple, in this post I&rsquo;ll assume:</p>
 
 <ul>
 <li>You&rsquo;re running macOS El Capitan (10.11) or later</li>
 <li>You&rsquo;re already familiar with PureScript, and have a recent version installed</li>
-<li>You have either a recent version of Xcode (7.3+) or its command-line tools installed (<code>git</code>, <code>clang</code>, and <code>make</code> need to be there)</li>
+<li>You have a recent version of Xcode (7.3+) installed</li>
+<li>You&rsquo;re familiar with the basics of iOS/macOS development using Xcode</li>
 </ul>
 
 
-<p>I&rsquo;ll go through the steps, and then provide a few extra details afterwards.</p>
+<p>These instructions should apply to all Xcode-based targets, although I&rsquo;ve only tested iOS and macOS for now.</p>
 
 <p><strong>Step 1: Install the PureScript-to-C++11 compiler,</strong> <code>pcc</code></p>
 
 <ol>
-<li>Go to the <a href="https://github.com/pure11/pure11/releases">pure11 repo releases</a> and download the latest <code>pcc.zip</code> file</li>
-<li>Unzip and copy to a location on your path</li>
+<li>Go to the <a href="https://github.com/pure11/pure11/releases">pure11 repo releases</a> and download the latest <code>pcc.zip</code> file. If you already have a version installed, be sure to use a version dated <strong>2016-11-22</strong> or later, since that&rsquo;s when extra support for Xcode was added.</li>
+<li>Unzip and copy to the same directory you installed other PureScript utilities (particulary <code>psc-package</code>). This restriction might be removed later.</li>
 </ol>
 
 
-<p><strong>Step 2: Write your “hello, world” program</strong></p>
+<p><strong>Step 2: Create a new Xcode iOS project in the standard way</strong></p>
 
 <ol>
-<li>Make a working directory anywhere you like, named anything you like</li>
-<li>Make a subdirectory there called “<code>src</code>”</li>
-<li>Create your source file in <code>src</code> with contents:</li>
+<li><p>Using Xcode&rsquo;s menus:</p>
+
+<p> File &ndash;><br/>
+ New &ndash;><br/>
+ Project&hellip;&ndash;><br/>
+ iOS &ndash;><br/>
+ Single View Application &ndash;><br/>
+ Language: Objective-C (for now, we&rsquo;ll do Swift in a later post)</p></li>
+<li><p>Save the project anywhere you like</p></li>
+<li>Make sure to do your normal selection of Team, Provisioning Profile, etc. If you aren&rsquo;t a registered developer and only plan to try this on the simulator, I believe you won&rsquo;t need them.</li>
 </ol>
 
 
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><pre class="code"><code class = "#{lang}"><span class="kr">module</span> <span class="nn">Main</span> <span class="kr">where</span>
+<p><strong>Step 3: Create some PureScript code to use in your project</strong></p>
+
+<ol>
+<li><p>Create a directory anywhere you like. We&rsquo;ll refer to it as your PureScript working directory. In that directory, create a subdirectory called &ldquo;<code>src</code>&rdquo;.</p></li>
+<li><p>In <code>src</code>, create a PureScript source file, naming it &ldquo;<code>PMath.purs</code>&rdquo;. Add the following code to <code>PMath.purs</code>:</p></li>
+</ol>
+
+
+<ul style="position: relative; top: -2em; margin-bottom: -2em">
+
+<figure class='code'><div class="highlight"><pre class="code"><code class = "#{lang}"><span class="kr">module</span> <span class="nn">PMath</span> <span class="kr">where</span>
 
 <span class="kr">import</span> <span class="nn">Prelude</span>
-<span class="kr">import</span> <span class="nn">Control.Monad.Eff</span> <span class="p">(</span><span class="kt">Eff</span><span class="p">)</span>
-<span class="kr">import</span> <span class="nn">Control.Monad.Eff.Console</span> <span class="p">(</span><span class="kt">CONSOLE</span><span class="p">,</span> <span class="nf">log</span><span class="p">)</span>
 
-<span class="nf">main</span> <span class="ow">::</span> <span class="kt">Eff</span> <span class="p">(</span><span class="n">console</span> <span class="ow">::</span> <span class="kt">CONSOLE</span><span class="p">)</span> <span class="kt">Unit</span>
-<span class="nf">main</span> <span class="ow">=</span> <span class="kr">do</span>
-<span class="nf">log</span> <span class="s">&quot;hello, world!&quot;</span>
+<span class="nf">fib</span> <span class="ow">::</span> <span class="kt">Int</span> <span class="ow">-&gt;</span> <span class="kt">Int</span>
+<span class="nf">fib</span> <span class="mi">0</span> <span class="ow">=</span> <span class="mi">0</span>
+<span class="nf">fib</span> <span class="mi">1</span> <span class="ow">=</span> <span class="mi">1</span>
+<span class="nf">fib</span> <span class="n">n</span> <span class="ow">=</span> <span class="n">fib</span> <span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="n">fib</span> <span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
 </code></pre></div></figure>
 
+</ul>
 
-<p><strong>Step 3: Generate configuration files (</strong><code>Makefile</code> <strong>and</strong> <code>psc-package.json</code><strong>)</strong></p>
 
-<p>From your working directory run the <code>pcc</code> command with no arguments:</p>
 
-<pre><code>$ pcc
-</code></pre>
 
-<p>You should see something like:</p>
+<ol start="3">
+<li>
+In the Terminal, from your working directory (one level up from <code>src</code>), run the <code>pcc</code> command with just the <code>--xcode</code> option:
 
-<pre><code>Generating Makefile... pcc executable location /Users/andy/.local/bin/pcc
+<span style="position: relative; top: 1em;">
+
+
+<figure class='code'><div class="highlight"><pre class="code"><code class = "#{lang}">~/Projects/BlogPureScript/$ pcc --xcode
+
+Generating psc-xcode.sh...
+Done
+Add this file to an Xcode &#39;Run Script&#39; build phase.
+
+Generating psc-package.json...
+Done
+Use the &#39;psc-package&#39; utility to install or update packages.
+
+Generating Makefile... pcc executable location /Users/andy/.local/bin/pcc
 Done
 
-Run 'make' or 'make release' to build an optimized release build.
-Run 'make debug' to build an executable with assertions enabled and
+Run &#39;make&#39; or &#39;make release&#39; to build an optimized release build.
+Run &#39;make debug&#39; to build an executable with assertions enabled and
 suitable for source-level debugging.
 
 The resulting binary executable will be located in output/bin (by default).
-</code></pre>
 
-<p><strong>Step 4: Build and run</strong></p>
+~/Projects/BlogPureScript/$
+</code></pre></div></figure>
+
+
+</span>
+</li>
+</ol>
+
+
+<p><strong>Step 4: Add PureScript code to your project settings</strong></p>
 
 <ol>
-<li><p>Again from your working directory, run the <code>make</code> command:</p>
+<li><p>From Xcode&rsquo;s &ldquo;Project navigator,&rdquo; select your project (topmost level). You should see various tabs in the main window. Select &ldquo;Build Phases&rdquo; and:</p>
 
-<pre><code> $ make
-</code></pre>
+<ol type="a">
+<li>Click the &ldquo;+&rdquo; &ndash;> &ldquo;New Run Script Phase&rdquo;</li>
+<li>Drag the new &ldquo;Run Script&rdquo; section to be <em>before</em> &ldquo;Compile Sources&rdquo;</li>
+<li><p>Expand the &ldquo;Run Script&rdquo; section (triangle), and in its editor add the following:</p>
 
-<p> You should see something like:</p>
-
-<pre><code> Getting packages using 'psc-package'...
- Updating 3 packages...
- Updating console
- Updating eff
- Updating prelude
- Update complete
- ...
- Compiling Data.NaturalTransformation
- Compiling Data.Show
- Compiling Data.Boolean
- Compiling Control.Semigroupoid
- Compiling Control.Category
- Compiling Data.Void
- Compiling Data.Unit
- ...
- Compiling Main
- Creating output/Control/Applicative/Applicative.o
- Creating output/Control/Apply/Apply.o
- Creating output/Control/Apply/Apply_ffi.o
- Creating output/Control/Bind/Bind.o
- ...
- Linking output/bin/main
-</code></pre></li>
-<li><p>Run your new program:</p>
-
-<pre><code>$ ./output/bin/main 
-hello, world!
+<pre><code> cd path/to/your/working_dir
+ sh psc-xcode.sh
 </code></pre></li>
 </ol>
 
 
-<p>And that&rsquo;s it!</p>
+<p>   It should look similar to this screenshot:</p>
+
+<p>   <img src="/images/run_script.png"></p></li>
+<li><p>Now go to the &ldquo;Build Settings&rdquo; tab. Using the embedded search control (upper right), enter &ldquo;header search&rdquo;. If you don&rsquo;t see any results, make sure you have the &ldquo;All&rdquo; button selected (instead of &ldquo;Basic&rdquo; or &ldquo;Customized&rdquo;). Select the &ldquo;Header Search Paths&rdquo; item and add the value &ldquo;<code>path/to/your/working_dir/output</code>&rdquo; to it, meaning the &ldquo;<code>output</code>&rdquo; subdirectory in your working directory (it doesn&rsquo;t exist yet, but it will be generated during the build process). Make sure to press &ldquo;return&rdquo; to save the value.</p>
+
+<p>   <img src="/images/search_paths.png"></p></li>
+<li><p>Again from &ldquo;Build Settings,&rdquo; change your search term to &ldquo;linker flags&rdquo; to find &ldquo;Other Linker Flags.&rdquo; Add the values<br>&ldquo;<code>-lc++ path/to/your/working_dir/output/bin/purescript.o</code>&rdquo;, as shown below. This &ldquo;<code>.o</code>&rdquo; file is a native combined object file containing all of your compiled PureScript modules (sort of like a static lib), which will be generated during the build process. Again, remember to press &ldquo;return&rdquo;.</p>
+
+<p>   <img src="/images/linker_flags.png"></p></li>
+</ol>
+
+
+<p><strong>Step 5: Add some Objective-C++ code that calls your PureScript code</strong></p>
+
+<ol>
+<li><p>In your Xcode project, rename <code>ViewController.m</code> to <code>ViewController.mm</code> &mdash; make sure you do this from Xcode, not the Terminal.</p></li>
+<li><p>In <code>ViewController.mm</code> you should see implementations for methods like <code>viewDidLoad</code>. Add the implementation for <code>viewDidAppear</code> shown below, as well as adding <code>#import "PMath/PMath.hh"</code> and <code>using PMath::fib;</code> near the top. Ignore any of the &ldquo;live&rdquo; errors for now.</p></li>
+</ol>
+
+
+<ul style="position: relative; top: -2em;">
+
+
+<figure class='code'><div class="highlight"><pre class="code"><code class = "#{lang}"><span class="cp">#import &quot;ViewController.h&quot;</span>
+<span class="cp">#import &quot;PMath/PMath.hh&quot;</span>
+
+<span class="c1">// This isn&#39;t necessary if we qualify our calls to the</span>
+<span class="c1">// function as PMath::fib(x) -- but it looks nicer...</span>
+<span class="c1">//</span>
+<span class="n">using</span> <span class="n">PMath</span><span class="o">::</span><span class="n">fib</span><span class="p">;</span>
+
+<span class="k">@interface</span> <span class="nc">ViewController</span> <span class="p">()</span>
+<span class="k">@end</span>
+
+<span class="k">@implementation</span> <span class="nc">ViewController</span>
+
+<span class="k">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">viewDidLoad</span> <span class="p">{</span>
+  <span class="p">[</span><span class="n">super</span> <span class="n">viewDidLoad</span><span class="p">];</span>
+<span class="p">}</span>
+
+<span class="k">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">viewDidAppear:</span><span class="p">(</span><span class="kt">BOOL</span><span class="p">)</span> <span class="n">animated</span> <span class="p">{</span>
+  <span class="p">[</span><span class="n">super</span> <span class="nl">viewDidAppear:</span><span class="n">animated</span><span class="p">];</span>
+
+  <span class="c1">// Direct call to our PureScript function</span>
+  <span class="c1">//</span>
+  <span class="kt">int</span> <span class="n">result</span> <span class="o">=</span> <span class="n">fib</span><span class="p">(</span><span class="mi">10</span><span class="p">);</span>
+
+  <span class="n">NSString</span><span class="o">*</span> <span class="n">resultString</span> <span class="o">=</span>
+    <span class="p">[</span><span class="n">NSString</span> <span class="nl">stringWithFormat:</span><span class="s">@&quot;Result of fib 10 is %d&quot;</span><span class="p">,</span> <span class="n">result</span><span class="p">];</span>
+
+  <span class="n">UIAlertController</span> <span class="o">*</span> <span class="n">alert</span> <span class="o">=</span>
+    <span class="p">[</span><span class="n">UIAlertController</span> <span class="nl">alertControllerWithTitle:</span><span class="s">@&quot;Value from PureScript&quot;</span>
+                                        <span class="nl">message:</span><span class="n">resultString</span>
+                                 <span class="nl">preferredStyle:</span><span class="n">UIAlertControllerStyleAlert</span><span class="p">];</span>
+  <span class="kt">id</span> <span class="n">okAction</span> <span class="o">=</span>
+    <span class="p">[</span><span class="n">UIAlertAction</span> <span class="nl">actionWithTitle:</span><span class="s">@&quot;OK&quot;</span>
+                             <span class="nl">style:</span><span class="n">UIAlertActionStyleDefault</span>
+                           <span class="nl">handler:</span><span class="o">^</span><span class="p">(</span><span class="n">UIAlertAction</span> <span class="o">*</span> <span class="n">_Nonnull</span> <span class="n">action</span><span class="p">)</span> <span class="p">{</span>
+                           <span class="p">}];</span>
+
+  <span class="p">[</span><span class="n">alert</span> <span class="nl">addAction:</span><span class="n">okAction</span><span class="p">];</span>
+  <span class="p">[</span><span class="n">self</span> <span class="nl">presentViewController:</span><span class="n">alert</span> <span class="nl">animated:</span><span class="n">YES</span> <span class="nl">completion:</span><span class="nb">nil</span><span class="p">];</span>
+<span class="p">}</span>
+
+<span class="k">@end</span>
+</code></pre></div></figure>
+
+</ul>
+
+
+<p><strong>Step 6: Build the project and run it</strong></p>
+
+<ol>
+<li><p>For now, make sure your project is set to build a simulator target (it should be, by default). Build using Xcode&rsquo;s usual menu, Product &ndash;> Build (or shortcut Command-B). You should get a &ldquo;build succeeded&rdquo;.</p></li>
+<li><p>Run it! (menu Product &ndash;> Run or shortcut Command-R)</p>
+
+<p>   <img src="/images/ios_app.png" width="375"></p></li>
+<li><p>With Debug builds, you can use Xcode&rsquo;s debugger as well (on the generated C++ code):</p>
+
+<p>   <img src="/images/debugger.png"></p></li>
+</ol>
+
 
 <p><strong>Next steps</strong></p>
 
-<p>As you make any changes to your source (<code>.purs</code>) file(s), simply run <code>make</code> again to rebuild.</p>
+<p>You can now proceed to make changes to any source files (including your PureScript ones) and simply rebuild/test/repeat using Xcode. As you&rsquo;re developing your app, if you just want to type check your PureScript changes (not recompile all the way to a binary target), use Terminal to run &ldquo;<code>make codegen</code>&rdquo; from your working directory.</p>
 
-<p>Using PureScript&rsquo;s new <code>psc-package</code> utility, you can install more packages (libraries of modules) from a verified package set.</p>
-
-<p>This is by no means the only thing you can do with the tools, nor is it the only plaform supported &mdash; I regularly test on Linux (gcc) and occasionally Windows 10 (Visual Studio 2015) &mdash; but it should give you the basics of getting up and running.</p>
+<p>If you take a peek at the <code>psc-xcode.sh</code> script, you&rsquo;ll see that your compiled PureScript C++ objects will respect your project settings for things like Debug/Release builds and target architecture &mdash; and will rebuild appropriately if any of these things change. This also means you can do device hardware builds; as with any normal iOS project, simply change your target to one of the device variants and build.</p>
 </div>
   <div class="sharing">
   
-  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://andyarvanitis.com/hello-world-purescript-cpp/" data-via="andyarvanitis" data-counturl="http://andyarvanitis.com/hello-world-purescript-cpp/" data-text="““Hello, world” with PureScript C++”">Tweet</a>
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://andyarvanitis.com/ios-with-purescript-c-plus-plus/" data-via="andyarvanitis" data-counturl="http://andyarvanitis.com/ios-with-purescript-c-plus-plus/" data-text="“iOS (and macOS) with PureScript C++”">Tweet</a>
   
 </div>
 
@@ -268,7 +359,7 @@ hello, world!
     </div>
   </div>
   <footer role="contentinfo"><p>
-  Copyright &copy; 2016 - Andy Arvanitis -
+  Copyright &copy; 2017 - Andy Arvanitis -
   <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
 </p>
 
