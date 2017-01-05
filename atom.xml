@@ -4,7 +4,7 @@
   <title><![CDATA[Andy Arvanitis]]></title>
   <link href="http://andyarvanitis.com/atom.xml" rel="self"/>
   <link href="http://andyarvanitis.com/"/>
-  <updated>2017-01-05T10:42:48-08:00</updated>
+  <updated>2017-01-05T11:50:24-08:00</updated>
   <id>http://andyarvanitis.com/</id>
   <author>
     <name><![CDATA[Andy Arvanitis]]></name>
@@ -12,6 +12,261 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[An FFI example for PureScript C++: PCRE]]></title>
+    <link href="http://andyarvanitis.com/an-ffi-example-for-purescript-c-plus-plus-pcre/"/>
+    <updated>2017-01-03T15:10:00-08:00</updated>
+    <id>http://andyarvanitis.com/an-ffi-example-for-purescript-c-plus-plus-pcre</id>
+    <content type="html"><![CDATA[<p>In case you haven’t read it, for a brief overview of the PureScript C++ FFI please see my guest post in “24 Days of PureScript 2016”, <a href="https://github.com/paf31/24-days-of-purescript-2016/blob/master/19.markdown">Day 19 – Intro to the C++ FFI</a>.</p>
+
+<p>In this post, I&rsquo;ll demonstrate one way to tackle interop with a not-too-trivial C library, namely “Perl Compatible Regular Expressions”, a.k.a. <a href="http://www.pcre.org/">PCRE</a>. I don&rsquo;t actually have much experience with this library, but I was inspired to try creating bindings for it after recently re-reading Chapter 17: “Interfacing with C: The FFI” from <a href="http://book.realworldhaskell.org/"><em>Real World Haskell</em></a> by Bryan O&#8217;Sullivan, Don Stewart, and John Goerzen.</p>
+
+<p>As this post borrows both the motivation and specific example from the book, please keep the following in mind:</p>
+
+<ol>
+<li>This is <strong>not</strong> a “PureScript is better at this than Haskell” post</li>
+<li>This is not necessarily the best way to use the PCRE library or create PureScript bindings for it</li>
+<li>The referenced Haskell example from the book is not necessarily the only way to do things in Haskell (see item 1)</li>
+</ol>
+
+
+<p>With that out of the way, the other thing I&rsquo;d like to point out is that I will use the same C API of the PCRE library that was used in the book, even though I&rsquo;m aware a newer version exists (pcre2), as does a C++ version. But again, please see items 1-3 above!</p>
+
+<h3>The Goal</h3>
+
+<p>Create the minimal bindings needed to use functions <code>pcre_compile</code> and <code>pcre_exec</code> in a simple example.</p>
+
+<h3>Declare the foreign types and functions on the PureScript side</h3>
+
+<p>This signature of C function <code>pcre_compile</code> looks like this:</p>
+
+<figure class='code'><div class="highlight"><pre class="code"><code class = "#{lang}"><span class="n">pcre</span> <span class="o">*</span><span class="nf">pcre_compile</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">pattern</span><span class="p">,</span>
+                   <span class="kt">int</span> <span class="n">options</span><span class="p">,</span>
+                   <span class="k">const</span> <span class="kt">char</span> <span class="o">**</span><span class="n">errptr</span><span class="p">,</span>
+                   <span class="kt">int</span> <span class="o">*</span><span class="n">erroffset</span><span class="p">,</span>
+                   <span class="k">const</span> <span class="kt">unsigned</span> <span class="kt">char</span> <span class="o">*</span><span class="n">tableptr</span><span class="p">);</span>
+</code></pre></div></figure>
+
+
+<p>The approach I&rsquo;ve chosen to take is to create a simplified and pure<a href="#footnote"><sup>1</sup></a> PureScript C++ wrapper function for <code>pcre_compile</code> which simply takes a string and options, and returns either an error string or a valid (foreign, opaque) <code>pcre</code> object. PureScript strings are native strings, so that means the only foreign types we need to declare are for the options and the <code>pcre</code> compiled code object:</p>
+
+<figure class='code'><div class="highlight"><pre class="code"><code class = "#{lang}"><span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">data</span> <span class="kt">PCREOption</span> <span class="ow">::</span> <span class="o">*</span>
+<span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">data</span> <span class="kt">PCRECode</span> <span class="ow">::</span> <span class="o">*</span>
+</code></pre></div></figure>
+
+
+<p>Note that <code>PCREOption</code> happens to be a C <code>int</code>, so we could have treated it that way on the PureScript side too and simply used <code>Int</code>, but I chose to abstract away that particular detail.</p>
+
+<p>The <code>PCREOption</code> type can have a number of (constant) values, so let&rsquo;s declare a couple of them for this exercise:</p>
+
+<figure class='code'><div class="highlight"><pre class="code"><code class = "#{lang}"><span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">caseless</span> <span class="ow">::</span> <span class="kt">PCREOption</span>
+<span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">dotall</span>   <span class="ow">::</span> <span class="kt">PCREOption</span>
+</code></pre></div></figure>
+
+
+<p>We can now declare our wrapper function in terms of these imported foreign types:</p>
+
+<figure class='code'><div class="highlight"><pre class="code"><code class = "#{lang}"><span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">compile</span> <span class="ow">::</span> <span class="kt">String</span> <span class="ow">-&gt;</span> <span class="kt">Array</span> <span class="kt">PCREOption</span> <span class="ow">-&gt;</span> <span class="kt">Either</span> <span class="kt">String</span> <span class="kt">PCRECode</span>
+</code></pre></div></figure>
+
+
+<p>We&rsquo;ll use a similar approach for the wrapper for <code>pcre_exec</code> and another function, <code>capturedCount</code>, but please see the full source later in the post for those details.</p>
+
+<h3>Implement the foreign wrapper functions on the C++ side</h3>
+
+<p>Let&rsquo;s jump right to the code:</p>
+
+<figure class='code'><div class="highlight"><pre class="code"><code class = "#{lang}"><span class="k">enum</span> <span class="p">{</span>
+  <span class="n">caseless</span> <span class="o">=</span> <span class="n">PCRE_CASELESS</span><span class="p">,</span>
+  <span class="n">dotall</span>   <span class="o">=</span> <span class="n">PCRE_DOTALL</span>
+<span class="p">};</span>
+</code></pre></div></figure>
+
+
+<p>The foreign options we declared earlier are defined here as <code>enum</code>s (<code>int</code>s) taking on <code>#define</code> constant values from the PCRE library. If they weren&rsquo;t capitalized, we wouldn&rsquo;t have needed them at all; the PureScript imports alone would have been sufficient.</p>
+
+<figure class='code'><div class="highlight"><pre class="code"><code class = "#{lang}"><span class="k">auto</span> <span class="n">compile</span><span class="p">(</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span> <span class="n">pattern</span><span class="p">,</span> <span class="k">const</span> <span class="n">any</span><span class="o">::</span><span class="n">array</span><span class="o">&amp;</span> <span class="n">options</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">any</span> <span class="p">{</span>
+  <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span> <span class="n">err</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">;</span>
+  <span class="kt">int</span> <span class="n">erroffset</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="k">auto</span> <span class="n">ptr</span> <span class="o">=</span> <span class="n">pcre_compile</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span>
+                          <span class="n">bitor_all</span><span class="p">(</span><span class="n">options</span><span class="p">),</span>
+                          <span class="o">&amp;</span><span class="n">err</span><span class="p">,</span>
+                          <span class="o">&amp;</span><span class="n">erroffset</span><span class="p">,</span>
+                          <span class="n">nullptr</span><span class="p">);</span>
+  <span class="k">return</span> <span class="n">ptr</span> <span class="o">?</span> <span class="n">Right</span><span class="p">(</span><span class="n">managed</span><span class="o">&lt;</span><span class="n">pcre</span><span class="o">&gt;</span><span class="p">(</span><span class="n">ptr</span><span class="p">,</span> <span class="n">pcre_free</span><span class="p">))</span> <span class="o">:</span> <span class="n">Left</span><span class="p">(</span><span class="n">err</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></figure>
+
+
+<p>The idea here is to have a straightforward-as-possible wrapper function that calls <code>pcre_compile</code>. We want to minimize any logic here, keeping any sophisticated decision-making on the PureScript side, where things are much more type safe. As mentioned earlier, I&rsquo;ve also chosen to implement this wrapper as a pure function which does not mutate any non-local data.</p>
+
+<p>The call to <code>pcre_compile</code> is pretty simple, but the last line has a couple of interesting things going on. The final return value depends on whether the pointer to the <code>pcre</code> object returned from <code>pcre_compile</code> is <code>NULL</code> or not:</p>
+
+<ul>
+<li><p>If it is <code>NULL</code>, the <code>err</code> (error) C-style string is implicitly copied and put into a PureScript <code>Left</code> data value from the familiar <code>Either</code> module. Both the new string and the <code>Left</code>&rsquo;s memory are automatically managed by PureScript.</p></li>
+<li><p>If it isn&rsquo;t <code>NULL</code>, the <code>pcre</code> object is stored as a managed pointer, meaning that the PureScript runtime will take ownership of its lifetime. When it is time to release/destroy it, I&rsquo;ve specified here that it will call <code>pcre_free</code> (from the PCRE library) to do the actual freeing. In turn, a <code>Right</code> is constructed with this value.</p></li>
+</ul>
+
+
+<div style="position: relative; top: -2em;">
+Note that one of the nice things about using the <strong>Either</strong> type like this is that the Either PureScript module didn&#8217;t explicitly expose these constructors via FFI functions – it&#8217;s just a benefit of the compiler targeting/generating C++ code.
+</div>
+
+
+<h3>Full source code and output</h3>
+
+<p>The rest of the implementation doesn&rsquo;t advance beyond these concepts, so I&rsquo;ll simply provide it without further comment. I hope this post highlighted some of the possibilities of PureScript&rsquo;s very flexible FFI in general, and specifically the C++ backend&rsquo;s flavor of it.</p>
+
+<figure class='code'><figcaption><span> Main.purs</span> <a href='http://andyarvanitis.com/downloads/code/Main.purs'>download</a></figcaption>
+<div class="highlight"><pre class="code"><code class = "#{lang}"><span class="kr">module</span> <span class="nn">Main</span> <span class="kr">where</span>
+
+<span class="kr">import</span> <span class="nn">Prelude</span>
+<span class="kr">import</span> <span class="nn">Control.Monad.Eff</span> <span class="p">(</span><span class="kt">Eff</span><span class="p">)</span>
+<span class="kr">import</span> <span class="nn">Control.Monad.Eff.Console</span> <span class="p">(</span><span class="kt">CONSOLE</span><span class="p">,</span> <span class="nf">log</span><span class="p">,</span> <span class="nf">logShow</span><span class="p">)</span>
+<span class="kr">import</span> <span class="nn">Data.Either</span> <span class="p">(</span><span class="kt">Either</span><span class="p">(</span><span class="o">..</span><span class="p">))</span>
+<span class="kr">import</span> <span class="nn">Data.Tuple</span> <span class="p">(</span><span class="kt">Tuple</span><span class="p">)</span>
+
+<span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">data</span> <span class="kt">PCREOption</span> <span class="ow">::</span> <span class="o">*</span>
+<span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">data</span> <span class="kt">PCRECode</span> <span class="ow">::</span> <span class="o">*</span>
+
+<span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">caseless</span> <span class="ow">::</span> <span class="kt">PCREOption</span>
+<span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">dotall</span>   <span class="ow">::</span> <span class="kt">PCREOption</span>
+
+<span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">compile</span> <span class="ow">::</span> <span class="kt">String</span> <span class="ow">-&gt;</span> <span class="kt">Array</span> <span class="kt">PCREOption</span> <span class="ow">-&gt;</span> <span class="kt">Either</span> <span class="kt">String</span> <span class="kt">PCRECode</span>
+
+<span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">capturedCount</span> <span class="ow">::</span> <span class="kt">PCRECode</span> <span class="ow">-&gt;</span> <span class="kt">Int</span>
+
+<span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">exec</span> <span class="ow">::</span> <span class="kt">PCRECode</span> <span class="ow">-&gt;</span>
+                       <span class="kt">String</span> <span class="ow">-&gt;</span>
+                       <span class="kt">Int</span> <span class="ow">-&gt;</span>
+                       <span class="kt">Array</span> <span class="kt">PCREOption</span> <span class="ow">-&gt;</span>
+                       <span class="kt">Int</span> <span class="ow">-&gt;</span>
+                       <span class="kt">Either</span> <span class="kt">Int</span> <span class="p">(</span><span class="kt">Array</span> <span class="p">(</span><span class="kt">Tuple</span> <span class="kt">Int</span> <span class="kt">Int</span><span class="p">))</span>
+
+<span class="nf">main</span> <span class="ow">::</span> <span class="n">forall</span> <span class="n">e</span><span class="o">.</span> <span class="kt">Eff</span> <span class="p">(</span> <span class="n">console</span> <span class="ow">::</span> <span class="kt">CONSOLE</span> <span class="o">|</span> <span class="n">e</span> <span class="p">)</span> <span class="kt">Unit</span>
+<span class="nf">main</span> <span class="ow">=</span> <span class="kr">do</span>
+  <span class="kr">case</span> <span class="p">(</span><span class="n">compile</span> <span class="s">&quot;^([^!]+)!(.+)=apquxz</span><span class="se">\\</span><span class="s">.ixr</span><span class="se">\\</span><span class="s">.zzz</span><span class="se">\\</span><span class="s">.ac</span><span class="se">\\</span><span class="s">.uk$&quot;</span> <span class="p">[</span><span class="n">caseless</span><span class="p">])</span> <span class="kr">of</span>
+    <span class="kt">Left</span> <span class="n">err</span> <span class="ow">-&gt;</span> <span class="n">log</span> <span class="n">err</span>
+    <span class="kt">Right</span> <span class="n">pcre</span> <span class="ow">-&gt;</span> <span class="kr">do</span>
+      <span class="kr">let</span> <span class="n">sz</span> <span class="ow">=</span> <span class="p">(</span><span class="n">capturedCount</span> <span class="n">pcre</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="mi">3</span>
+          <span class="n">result</span> <span class="ow">=</span> <span class="n">exec</span> <span class="n">pcre</span> <span class="s">&quot;abc!pqr=apquxz.ixr.zzz.ac.uk&quot;</span> <span class="mi">0</span> <span class="kt">[]</span> <span class="n">sz</span>
+      <span class="n">logShow</span> <span class="n">result</span>
+</code></pre></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span> Main.hh</span> <a href='http://andyarvanitis.com/downloads/code/Main.hh'>download</a></figcaption>
+<div class="highlight"><pre class="code"><code class = "#{lang}"><span class="cp">#ifndef MainFFI_HH</span>
+<span class="cp">#define MainFFI_HH</span>
+
+<span class="cp">#include &lt;pcre.h&gt;</span>
+<span class="cp">#include &quot;PureScript/PureScript.hh&quot;</span>
+
+<span class="k">namespace</span> <span class="n">Main</span> <span class="p">{</span>
+
+  <span class="k">using</span> <span class="k">namespace</span> <span class="n">PureScript</span><span class="p">;</span>
+
+  <span class="k">enum</span> <span class="p">{</span>
+    <span class="n">caseless</span> <span class="o">=</span> <span class="n">PCRE_CASELESS</span><span class="p">,</span>
+    <span class="n">dotall</span>   <span class="o">=</span> <span class="n">PCRE_DOTALL</span>
+  <span class="p">};</span>
+
+  <span class="k">auto</span> <span class="n">compile</span><span class="p">(</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span> <span class="n">pattern</span><span class="p">,</span> <span class="k">const</span> <span class="n">any</span><span class="o">::</span><span class="n">array</span><span class="o">&amp;</span> <span class="n">options</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">any</span><span class="p">;</span>
+
+  <span class="k">auto</span> <span class="n">capturedCount</span><span class="p">(</span> <span class="k">const</span> <span class="n">any</span><span class="o">&amp;</span> <span class="n">code</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">int</span><span class="p">;</span>
+
+  <span class="k">auto</span> <span class="n">exec</span><span class="p">(</span> <span class="k">const</span> <span class="n">any</span><span class="o">&amp;</span> <span class="n">code</span><span class="p">,</span>
+             <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span> <span class="n">subject</span><span class="p">,</span>
+             <span class="kt">int</span> <span class="n">startoffset</span><span class="p">,</span>
+             <span class="k">const</span> <span class="n">any</span><span class="o">::</span><span class="n">array</span><span class="o">&amp;</span> <span class="n">options</span><span class="p">,</span>
+             <span class="kt">int</span> <span class="n">ovecsize</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">any</span><span class="p">;</span>
+
+<span class="p">}</span> <span class="c1">// namespace Main</span>
+
+<span class="cp">#endif </span><span class="c1">// MainFFI_HH</span>
+</code></pre></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span> Main.cc</span> <a href='http://andyarvanitis.com/downloads/code/Main.cc'>download</a></figcaption>
+<div class="highlight"><pre class="code"><code class = "#{lang}"><span class="cp">#include &lt;cstring&gt;</span>
+<span class="cp">#include &quot;Main.hh&quot;</span>
+
+<span class="k">namespace</span> <span class="n">Main</span> <span class="p">{</span>
+
+  <span class="k">static</span> <span class="k">auto</span> <span class="n">bitor_all</span><span class="p">(</span> <span class="k">const</span> <span class="n">any</span><span class="o">::</span><span class="n">array</span><span class="o">&amp;</span> <span class="n">opts</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">int</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">combined_opts</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="k">auto</span> <span class="n">it</span> <span class="o">=</span> <span class="n">opts</span><span class="p">.</span><span class="n">cbegin</span><span class="p">(),</span> <span class="n">end</span> <span class="o">=</span> <span class="n">opts</span><span class="p">.</span><span class="n">cend</span><span class="p">();</span> <span class="n">it</span> <span class="o">!=</span> <span class="n">end</span><span class="p">;</span> <span class="n">it</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">combined_opts</span> <span class="o">|=</span> <span class="n">cast</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="o">*</span><span class="n">it</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">combined_opts</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">auto</span> <span class="n">compile</span><span class="p">(</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span> <span class="n">pattern</span><span class="p">,</span> <span class="k">const</span> <span class="n">any</span><span class="o">::</span><span class="n">array</span><span class="o">&amp;</span> <span class="n">options</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">any</span> <span class="p">{</span>
+    <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span> <span class="n">err</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">erroffset</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="k">auto</span> <span class="n">ptr</span> <span class="o">=</span> <span class="n">pcre_compile</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span>
+                            <span class="n">bitor_all</span><span class="p">(</span><span class="n">options</span><span class="p">),</span>
+                            <span class="o">&amp;</span><span class="n">err</span><span class="p">,</span>
+                            <span class="o">&amp;</span><span class="n">erroffset</span><span class="p">,</span>
+                            <span class="n">nullptr</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">ptr</span> <span class="o">?</span> <span class="n">Right</span><span class="p">(</span><span class="n">managed</span><span class="o">&lt;</span><span class="n">pcre</span><span class="o">&gt;</span><span class="p">(</span><span class="n">ptr</span><span class="p">,</span> <span class="n">pcre_free</span><span class="p">))</span> <span class="o">:</span> <span class="n">Left</span><span class="p">(</span><span class="n">err</span><span class="p">);</span>
+  <span class="p">}</span>
+
+  <span class="k">auto</span> <span class="n">capturedCount</span><span class="p">(</span> <span class="k">const</span> <span class="n">any</span><span class="o">&amp;</span> <span class="n">code</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">int</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">pcre_fullinfo</span><span class="p">(</span><span class="n">cast</span><span class="o">&lt;</span><span class="k">const</span> <span class="n">pcre</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">code</span><span class="p">),</span>
+                  <span class="n">nullptr</span><span class="p">,</span>
+                  <span class="n">PCRE_INFO_CAPTURECOUNT</span><span class="p">,</span>
+                  <span class="o">&amp;</span><span class="n">count</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">count</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="k">auto</span> <span class="n">exec</span><span class="p">(</span> <span class="k">const</span> <span class="n">any</span><span class="o">&amp;</span> <span class="n">code</span><span class="p">,</span>
+             <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span> <span class="n">subject</span><span class="p">,</span>
+             <span class="kt">int</span> <span class="n">startoffset</span><span class="p">,</span>
+             <span class="k">const</span> <span class="n">any</span><span class="o">::</span><span class="n">array</span><span class="o">&amp;</span> <span class="n">options</span><span class="p">,</span>
+             <span class="kt">int</span> <span class="n">ovecsize</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">any</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">ovector</span><span class="p">[</span><span class="n">ovecsize</span><span class="p">];</span>
+    <span class="k">auto</span> <span class="n">r</span> <span class="o">=</span> <span class="n">pcre_exec</span><span class="p">(</span><span class="n">cast</span><span class="o">&lt;</span><span class="k">const</span> <span class="n">pcre</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">code</span><span class="p">),</span>
+                       <span class="n">nullptr</span><span class="p">,</span>
+                       <span class="n">subject</span><span class="p">,</span>
+                       <span class="n">strlen</span><span class="p">(</span><span class="n">subject</span><span class="p">),</span>
+                       <span class="n">startoffset</span><span class="p">,</span>
+                       <span class="n">bitor_all</span><span class="p">(</span><span class="n">options</span><span class="p">),</span>
+                       <span class="n">ovector</span><span class="p">,</span>
+                       <span class="n">ovecsize</span><span class="p">);</span>
+    <span class="n">any</span><span class="o">::</span><span class="n">array</span> <span class="n">offsets</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="k">auto</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">r</span> <span class="o">*</span> <span class="mi">2</span><span class="p">;</span> <span class="n">i</span> <span class="o">+=</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">offsets</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span> <span class="n">Tuple</span><span class="p">(</span><span class="n">ovector</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">ovector</span><span class="p">[</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">])</span> <span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">r</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">?</span> <span class="n">Left</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="o">:</span> <span class="n">Right</span><span class="p">(</span><span class="n">offsets</span><span class="p">);</span>
+  <span class="p">}</span>
+
+<span class="p">}</span> <span class="c1">// Main</span>
+</code></pre></div></figure>
+
+
+<p><strong>Build and run</strong></p>
+
+<figure class='code'><div class="highlight"><pre class="code"><code class = "#{lang}">$ make debug -j4 LDFLAGS=-lpcre
+...
+$ make run
+(Right [(Tuple 0 28),(Tuple 0 3),(Tuple 4 7)])
+</code></pre></div></figure>
+
+
+<p><a name="footnote"></a></br></p>
+
+<ol style="font-size:80%">
+<li>It&#8217;s also possible to go with “effectful” functions, and handle allocation and mutation in ways similar to what is done in the book, or with something like PureScript&#8217;s <code>STRef</code>, or something else altogether.</li>
+</ol>
+
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[iOS (and macOS) with PureScript C++]]></title>
