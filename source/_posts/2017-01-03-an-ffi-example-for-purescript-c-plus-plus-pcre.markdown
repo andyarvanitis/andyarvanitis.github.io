@@ -80,7 +80,7 @@ auto compile( const char * pattern, const any::array& options ) -> any {
                           &err,
                           &erroffset,
                           nullptr);
-  return ptr ? Right(managed<pcre>(ptr, pcre_free)) : Left(string(err));
+  return ptr ? Right(managed<pcre>(ptr, pcre_free)) : Left(err);
 }
 {% endcodeblock %}
 
@@ -88,9 +88,9 @@ The idea here is to have a straightforward-as-possible wrapper function that cal
 
 The call to `pcre_compile` is pretty simple, but the last line has a couple of interesting things going on. The final return value depends on whether the pointer to the `pcre` object returned from `pcre_compile` is `NULL` or not:
 
-* If it is `NULL`, the `err` (error) C-style string is packed into a `string` object, which is in turn put into a PureScript `Left` data constructor from the familiar `Either` module. Both the new string and the `Left` value's memory are automatically managed by PureScript. 
+* If it is `NULL`, the `err` (error) C-style string is implicitly copied and put into a PureScript `Left` data value from the familiar `Either` module. Both the new string and the `Left`'s memory are automatically managed by PureScript.
  
-* If it isn't `NULL`, the `pcre` object is placed into a PureScript C++ FFI '`any`' as a managed pointer, meaning that the PureScript runtime will take ownership of its lifetime. When it is time to release/destroy it, I've specified that it will call `pcre_free` (from the PCRE library) to do the actual freeing. In turn, a `Right` is constructed with this value.
+* If it isn't `NULL`, the `pcre` object is stored as a managed pointer, meaning that the PureScript runtime will take ownership of its lifetime. When it is time to release/destroy it, I've specified here that it will call `pcre_free` (from the PCRE library) to do the actual freeing. In turn, a `Right` is constructed with this value.
 
 <div style="position: relative; top: -2em;">
 Note that one of the nice things about using the <strong>Either</strong> type like this is that the Either PureScript module didn't explicitly expose these constructors via FFI functions – it's just a benefit of the compiler targeting/generating C++ code.

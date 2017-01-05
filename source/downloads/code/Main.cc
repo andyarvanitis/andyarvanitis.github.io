@@ -19,7 +19,7 @@ namespace Main {
                             &err,
                             &erroffset,
                             nullptr);
-    return ptr ? Right(managed<pcre>(ptr, pcre_free)) : Left(string(err));
+    return ptr ? Right(managed<pcre>(ptr, pcre_free)) : Left(err);
   }
 
   auto capturedCount( const any& code ) -> int {
