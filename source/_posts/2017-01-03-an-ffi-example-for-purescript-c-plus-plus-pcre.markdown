@@ -34,7 +34,7 @@ pcre *pcre_compile(const char *pattern,
                    const unsigned char *tableptr); 
 {% endcodeblock %}
 
-The approach I've chosen to take is to create a simplified and pure<a href="#footnote"><sup>1</sup></a> PureScript C++ wrapper function for `pcre_compile` which simply takes a string and option(s), and returns either an error string or a valid (foreign, opaque) `pcre` object. PureScript strings are native strings, so that means the only foreign types we need to declare are for the options and the `pcre` compiled code object:
+The approach I've chosen to take is to create a simplified and pure<a href="#footnote"><sup>1</sup></a> PureScript C++ wrapper function for `pcre_compile` which simply takes a string and options, and returns either an error string or a valid (foreign, opaque) `pcre` object. PureScript strings are native strings, so that means the only foreign types we need to declare are for the options and the `pcre` compiled code object:
 
 {% codeblock lang:haskell %}
 foreign import data PCREOption :: *
