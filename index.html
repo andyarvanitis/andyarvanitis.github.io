@@ -9,7 +9,7 @@
   <meta name="author" content="Andy Arvanitis">
 
   
-  <meta name="description" content="In case you haven’t read it, for a brief overview of the PureScript C++ FFI please see my guest post in “24 Days of PureScript 2016”, Day 19 – Intro &hellip;">
+  <meta name="description" content="Thanks to Xcode&rsquo;s support for custom script build phases and environment variables compatible with GNU Make, you can integrate your PureScript &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -106,7 +106,7 @@
       
   <header>
     
-      <h1 class="entry-title"><a href="/an-ffi-example-for-purescript-c-plus-plus-pcre/">An FFI Example for PureScript C++: PCRE</a></h1>
+      <h1 class="entry-title"><a href="/ios-with-purescript-c-plus-plus/">iOS (and macOS) With PureScript C++</a></h1>
     
     
       <p class="meta">
@@ -122,264 +122,219 @@
   
 
 
-<time datetime="2017-01-03T15:10:00-08:00" pubdate data-updated="true">January 03 2017</time>
+<time datetime="2016-11-30T09:34:00-08:00" pubdate data-updated="true">November 30 2016</time>
         
       </p>
     
   </header>
 
 
-  <div class="entry-content"><p>In case you haven’t read it, for a brief overview of the PureScript C++ FFI please see my guest post in “24 Days of PureScript 2016”, <a href="https://github.com/paf31/24-days-of-purescript-2016/blob/master/19.markdown">Day 19 – Intro to the C++ FFI</a>.</p>
+  <div class="entry-content"><p>Thanks to Xcode&rsquo;s support for custom script build phases and environment variables compatible with GNU Make, you can integrate your PureScript code fairly painlessly. In this post I&rsquo;ll show you the basics of using PureScript in an Xcode project. I&rsquo;m just going to focus on that, so you won&rsquo;t get any details on things like the (bidirectional) FFI here &mdash; I plan to cover that in another post.</p>
 
-<p>In this post, I&rsquo;ll demonstrate one way to tackle interop with a not-too-trivial C library, namely “Perl Compatible Regular Expressions”, a.k.a. <a href="http://www.pcre.org/">PCRE</a>. I don&rsquo;t actually have much experience with this library, but I was inspired to try creating bindings for it after recently re-reading Chapter 17: “Interfacing with C: The FFI” from <a href="http://book.realworldhaskell.org/"><em>Real World Haskell</em></a> by Bryan O&#8217;Sullivan, Don Stewart, and John Goerzen.</p>
-
-<p>As this post borrows both the motivation and specific example from the book, please keep the following in mind:</p>
-
-<ol>
-<li>This is <strong>not</strong> a “PureScript is better at this than Haskell” post</li>
-<li>This is not necessarily the best way to use the PCRE library or create PureScript bindings for it</li>
-<li>The referenced Haskell example from the book is not necessarily the only way to do things in Haskell (see item 1)</li>
-</ol>
-
-
-<p>With that out of the way, the other thing I&rsquo;d like to point out is that I will use the same C API of the PCRE library that was used in the book, even though I&rsquo;m aware a newer version exists (pcre2), as does a C++ version. But again, please see items 1-3 above!</p>
-
-<h3>The Goal</h3>
-
-<p>Create the minimal bindings needed to use functions <code>pcre_compile</code> and <code>pcre_exec</code> in a simple example.</p>
-
-<h3>Declare the foreign types and functions on the PureScript side</h3>
-
-<p>This signature of C function <code>pcre_compile</code> looks like this:</p>
-
-<figure class='code'><div class="highlight"><pre class="code"><code class = "#{lang}"><span class="n">pcre</span> <span class="o">*</span><span class="nf">pcre_compile</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">pattern</span><span class="p">,</span>
-                   <span class="kt">int</span> <span class="n">options</span><span class="p">,</span>
-                   <span class="k">const</span> <span class="kt">char</span> <span class="o">**</span><span class="n">errptr</span><span class="p">,</span>
-                   <span class="kt">int</span> <span class="o">*</span><span class="n">erroffset</span><span class="p">,</span>
-                   <span class="k">const</span> <span class="kt">unsigned</span> <span class="kt">char</span> <span class="o">*</span><span class="n">tableptr</span><span class="p">);</span>
-</code></pre></div></figure>
-
-
-<p>The approach I&rsquo;ve chosen to take is to create a simplified and pure<a href="#footnote"><sup>1</sup></a> PureScript C++ wrapper function for <code>pcre_compile</code> which simply takes a string and option(s), and returns either an error string or a valid (foreign, opaque) <code>pcre</code> object. PureScript strings are native strings, so that means the only foreign types we need to declare are for the options and the <code>pcre</code> compiled code object:</p>
-
-<figure class='code'><div class="highlight"><pre class="code"><code class = "#{lang}"><span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">data</span> <span class="kt">PCREOption</span> <span class="ow">::</span> <span class="o">*</span>
-<span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">data</span> <span class="kt">PCRECode</span> <span class="ow">::</span> <span class="o">*</span>
-</code></pre></div></figure>
-
-
-<p>Note that <code>PCREOption</code> happens to be a C <code>int</code>, so we could have treated it that way on the PureScript side too and simply used <code>Int</code>, but I chose to abstract away that particular detail.</p>
-
-<p>The <code>PCREOption</code> type can have a number of (constant) values, so let&rsquo;s declare a couple of them for this exercise:</p>
-
-<figure class='code'><div class="highlight"><pre class="code"><code class = "#{lang}"><span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">caseless</span> <span class="ow">::</span> <span class="kt">PCREOption</span>
-<span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">dotall</span>   <span class="ow">::</span> <span class="kt">PCREOption</span>
-</code></pre></div></figure>
-
-
-<p>We can now declare our wrapper function in terms of these imported foreign types:</p>
-
-<figure class='code'><div class="highlight"><pre class="code"><code class = "#{lang}"><span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">compile</span> <span class="ow">::</span> <span class="kt">String</span> <span class="ow">-&gt;</span> <span class="kt">Array</span> <span class="kt">PCREOption</span> <span class="ow">-&gt;</span> <span class="kt">Either</span> <span class="kt">String</span> <span class="kt">PCRECode</span>
-</code></pre></div></figure>
-
-
-<p>We&rsquo;ll use a similar approach for the wrapper for <code>pcre_exec</code> and another function, <code>capturedCount</code>, but please see the full source later in the post for those details.</p>
-
-<h3>Implement the foreign wrapper functions on the C++ side</h3>
-
-<p>Let&rsquo;s jump right to the code:</p>
-
-<figure class='code'><div class="highlight"><pre class="code"><code class = "#{lang}"><span class="k">enum</span> <span class="p">{</span>
-  <span class="n">caseless</span> <span class="o">=</span> <span class="n">PCRE_CASELESS</span><span class="p">,</span>
-  <span class="n">dotall</span>   <span class="o">=</span> <span class="n">PCRE_DOTALL</span>
-<span class="p">};</span>
-</code></pre></div></figure>
-
-
-<p>The foreign options we declared earlier are defined here as <code>enum</code>s (<code>int</code>s) taking on <code>#define</code> constant values from the PCRE library. If they weren&rsquo;t capitalized, we wouldn&rsquo;t have needed them at all; the PureScript imports alone would have been sufficient.</p>
-
-<figure class='code'><div class="highlight"><pre class="code"><code class = "#{lang}"><span class="k">auto</span> <span class="n">compile</span><span class="p">(</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span> <span class="n">pattern</span><span class="p">,</span> <span class="k">const</span> <span class="n">any</span><span class="o">::</span><span class="n">array</span><span class="o">&amp;</span> <span class="n">options</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">any</span> <span class="p">{</span>
-  <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span> <span class="n">err</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">;</span>
-  <span class="kt">int</span> <span class="n">erroffset</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-  <span class="k">auto</span> <span class="n">ptr</span> <span class="o">=</span> <span class="n">pcre_compile</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span>
-                          <span class="n">bitor_all</span><span class="p">(</span><span class="n">options</span><span class="p">),</span>
-                          <span class="o">&amp;</span><span class="n">err</span><span class="p">,</span>
-                          <span class="o">&amp;</span><span class="n">erroffset</span><span class="p">,</span>
-                          <span class="n">nullptr</span><span class="p">);</span>
-  <span class="k">return</span> <span class="n">ptr</span> <span class="o">?</span> <span class="n">Right</span><span class="p">(</span><span class="n">managed</span><span class="o">&lt;</span><span class="n">pcre</span><span class="o">&gt;</span><span class="p">(</span><span class="n">ptr</span><span class="p">,</span> <span class="n">pcre_free</span><span class="p">))</span> <span class="o">:</span> <span class="n">Left</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="n">err</span><span class="p">));</span>
-<span class="p">}</span>
-</code></pre></div></figure>
-
-
-<p>The idea here is to have a straightforward-as-possible wrapper function that calls <code>pcre_compile</code>. We want to minimize any logic here, keeping any sophisticated decision-making on the PureScript side, where things are much more type safe. As mentioned earlier, I&rsquo;ve also chosen to implement this wrapper as a pure function which does not mutate any non-local data.</p>
-
-<p>The call to <code>pcre_compile</code> is pretty simple, but the last line has a couple of interesting things going on. The final return value depends on whether the pointer to the <code>pcre</code> object returned from <code>pcre_compile</code> is <code>NULL</code> or not:</p>
+<p>To keep things simple, in this post I&rsquo;ll assume:</p>
 
 <ul>
-<li><p>If it is <code>NULL</code>, the <code>err</code> (error) C-style string is packed into a <code>string</code> object, which is in turn put into a PureScript <code>Left</code> data constructor from the familiar <code>Either</code> module. Both the new string and the <code>Left</code> value&rsquo;s memory are automatically managed by PureScript.</p></li>
-<li><p>If it isn&rsquo;t <code>NULL</code>, the <code>pcre</code> object is placed into a PureScript C++ FFI &lsquo;<code>any</code>&rsquo; as a managed pointer, meaning that the PureScript runtime will take ownership of its lifetime. When it is time to release/destroy it, I&rsquo;ve specified that it will call <code>pcre_free</code> (from the PCRE library) to do the actual freeing. In turn, a <code>Right</code> is constructed with this value.</p></li>
+<li>You&rsquo;re running macOS El Capitan (10.11) or later</li>
+<li>You&rsquo;re already familiar with PureScript, and have a recent version installed</li>
+<li>You have a recent version of Xcode (7.3+) installed</li>
+<li>You&rsquo;re familiar with the basics of iOS/macOS development using Xcode</li>
 </ul>
 
 
-<div style="position: relative; top: -2em;">
-Note that one of the nice things about using the <strong>Either</strong> type like this is that the Either PureScript module didn&#8217;t explicitly expose these constructors via FFI functions – it&#8217;s just a benefit of the compiler targeting/generating C++ code.
-</div>
+<p>These instructions should apply to all Xcode-based targets, although I&rsquo;ve only tested iOS and macOS for now.</p>
 
+<p><strong>Step 1: Install the PureScript-to-C++11 compiler,</strong> <code>pcc</code></p>
 
-<h3>Full source code and output</h3>
-
-<p>The rest of the implementation doesn&rsquo;t advance beyond these concepts, so I&rsquo;ll simply provide it without further comment. I hope this post highlighted some of the possibilities of PureScript&rsquo;s very flexible FFI in general, and specifically the C++ backend&rsquo;s flavor of it.</p>
-
-<figure class='code'><figcaption><span> Main.purs</span> <a href='/downloads/code/Main.purs'>download</a></figcaption>
-<div class="highlight"><pre class="code"><code class = "#{lang}"><span class="kr">module</span> <span class="nn">Main</span> <span class="kr">where</span>
-
-<span class="kr">import</span> <span class="nn">Prelude</span>
-<span class="kr">import</span> <span class="nn">Control.Monad.Eff</span> <span class="p">(</span><span class="kt">Eff</span><span class="p">)</span>
-<span class="kr">import</span> <span class="nn">Control.Monad.Eff.Console</span> <span class="p">(</span><span class="kt">CONSOLE</span><span class="p">,</span> <span class="nf">log</span><span class="p">,</span> <span class="nf">logShow</span><span class="p">)</span>
-<span class="kr">import</span> <span class="nn">Data.Either</span> <span class="p">(</span><span class="kt">Either</span><span class="p">(</span><span class="o">..</span><span class="p">))</span>
-<span class="kr">import</span> <span class="nn">Data.Tuple</span> <span class="p">(</span><span class="kt">Tuple</span><span class="p">)</span>
-
-<span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">data</span> <span class="kt">PCREOption</span> <span class="ow">::</span> <span class="o">*</span>
-<span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">data</span> <span class="kt">PCRECode</span> <span class="ow">::</span> <span class="o">*</span>
-
-<span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">caseless</span> <span class="ow">::</span> <span class="kt">PCREOption</span>
-<span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">dotall</span>   <span class="ow">::</span> <span class="kt">PCREOption</span>
-
-<span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">compile</span> <span class="ow">::</span> <span class="kt">String</span> <span class="ow">-&gt;</span> <span class="kt">Array</span> <span class="kt">PCREOption</span> <span class="ow">-&gt;</span> <span class="kt">Either</span> <span class="kt">String</span> <span class="kt">PCRECode</span>
-
-<span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">capturedCount</span> <span class="ow">::</span> <span class="kt">PCRECode</span> <span class="ow">-&gt;</span> <span class="kt">Int</span>
-
-<span class="nf">foreign</span> <span class="kr">import</span> <span class="nn">exec</span> <span class="ow">::</span> <span class="kt">PCRECode</span> <span class="ow">-&gt;</span>
-                       <span class="kt">String</span> <span class="ow">-&gt;</span>
-                       <span class="kt">Int</span> <span class="ow">-&gt;</span>
-                       <span class="kt">Array</span> <span class="kt">PCREOption</span> <span class="ow">-&gt;</span>
-                       <span class="kt">Int</span> <span class="ow">-&gt;</span>
-                       <span class="kt">Either</span> <span class="kt">Int</span> <span class="p">(</span><span class="kt">Array</span> <span class="p">(</span><span class="kt">Tuple</span> <span class="kt">Int</span> <span class="kt">Int</span><span class="p">))</span>
-
-<span class="nf">main</span> <span class="ow">::</span> <span class="n">forall</span> <span class="n">e</span><span class="o">.</span> <span class="kt">Eff</span> <span class="p">(</span> <span class="n">console</span> <span class="ow">::</span> <span class="kt">CONSOLE</span> <span class="o">|</span> <span class="n">e</span> <span class="p">)</span> <span class="kt">Unit</span>
-<span class="nf">main</span> <span class="ow">=</span> <span class="kr">do</span>
-  <span class="kr">case</span> <span class="p">(</span><span class="n">compile</span> <span class="s">&quot;^([^!]+)!(.+)=apquxz</span><span class="se">\\</span><span class="s">.ixr</span><span class="se">\\</span><span class="s">.zzz</span><span class="se">\\</span><span class="s">.ac</span><span class="se">\\</span><span class="s">.uk$&quot;</span> <span class="p">[</span><span class="n">caseless</span><span class="p">])</span> <span class="kr">of</span>
-    <span class="kt">Left</span> <span class="n">err</span> <span class="ow">-&gt;</span> <span class="n">log</span> <span class="n">err</span>
-    <span class="kt">Right</span> <span class="n">pcre</span> <span class="ow">-&gt;</span> <span class="kr">do</span>
-      <span class="kr">let</span> <span class="n">sz</span> <span class="ow">=</span> <span class="p">(</span><span class="n">capturedCount</span> <span class="n">pcre</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="mi">3</span>
-          <span class="n">result</span> <span class="ow">=</span> <span class="n">exec</span> <span class="n">pcre</span> <span class="s">&quot;abc!pqr=apquxz.ixr.zzz.ac.uk&quot;</span> <span class="mi">0</span> <span class="kt">[]</span> <span class="n">sz</span>
-      <span class="n">logShow</span> <span class="n">result</span>
-</code></pre></div></figure>
-
-
-
-
-<figure class='code'><figcaption><span> Main.hh</span> <a href='/downloads/code/Main.hh'>download</a></figcaption>
-<div class="highlight"><pre class="code"><code class = "#{lang}"><span class="cp">#ifndef MainFFI_HH</span>
-<span class="cp">#define MainFFI_HH</span>
-
-<span class="cp">#include &lt;pcre.h&gt;</span>
-<span class="cp">#include &quot;PureScript/PureScript.hh&quot;</span>
-
-<span class="k">namespace</span> <span class="n">Main</span> <span class="p">{</span>
-
-  <span class="k">using</span> <span class="k">namespace</span> <span class="n">PureScript</span><span class="p">;</span>
-
-  <span class="k">enum</span> <span class="p">{</span>
-    <span class="n">caseless</span> <span class="o">=</span> <span class="n">PCRE_CASELESS</span><span class="p">,</span>
-    <span class="n">dotall</span>   <span class="o">=</span> <span class="n">PCRE_DOTALL</span>
-  <span class="p">};</span>
-
-  <span class="k">auto</span> <span class="n">compile</span><span class="p">(</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span> <span class="n">pattern</span><span class="p">,</span> <span class="k">const</span> <span class="n">any</span><span class="o">::</span><span class="n">array</span><span class="o">&amp;</span> <span class="n">options</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">any</span><span class="p">;</span>
-
-  <span class="k">auto</span> <span class="n">capturedCount</span><span class="p">(</span> <span class="k">const</span> <span class="n">any</span><span class="o">&amp;</span> <span class="n">code</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">int</span><span class="p">;</span>
-
-  <span class="k">auto</span> <span class="n">exec</span><span class="p">(</span> <span class="k">const</span> <span class="n">any</span><span class="o">&amp;</span> <span class="n">code</span><span class="p">,</span>
-             <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span> <span class="n">subject</span><span class="p">,</span>
-             <span class="kt">int</span> <span class="n">startoffset</span><span class="p">,</span>
-             <span class="k">const</span> <span class="n">any</span><span class="o">::</span><span class="n">array</span><span class="o">&amp;</span> <span class="n">options</span><span class="p">,</span>
-             <span class="kt">int</span> <span class="n">ovecsize</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">any</span><span class="p">;</span>
-
-<span class="p">}</span> <span class="c1">// namespace Main</span>
-
-<span class="cp">#endif </span><span class="c1">// MainFFI_HH</span>
-</code></pre></div></figure>
-
-
-
-
-<figure class='code'><figcaption><span> Main.cc</span> <a href='/downloads/code/Main.cc'>download</a></figcaption>
-<div class="highlight"><pre class="code"><code class = "#{lang}"><span class="cp">#include &lt;cstring&gt;</span>
-<span class="cp">#include &quot;Main.hh&quot;</span>
-
-<span class="k">namespace</span> <span class="n">Main</span> <span class="p">{</span>
-
-  <span class="k">static</span> <span class="k">auto</span> <span class="n">bitor_all</span><span class="p">(</span> <span class="k">const</span> <span class="n">any</span><span class="o">::</span><span class="n">array</span><span class="o">&amp;</span> <span class="n">opts</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">int</span> <span class="p">{</span>
-    <span class="kt">int</span> <span class="n">combined_opts</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-    <span class="k">for</span> <span class="p">(</span><span class="k">auto</span> <span class="n">it</span> <span class="o">=</span> <span class="n">opts</span><span class="p">.</span><span class="n">cbegin</span><span class="p">(),</span> <span class="n">end</span> <span class="o">=</span> <span class="n">opts</span><span class="p">.</span><span class="n">cend</span><span class="p">();</span> <span class="n">it</span> <span class="o">!=</span> <span class="n">end</span><span class="p">;</span> <span class="n">it</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
-      <span class="n">combined_opts</span> <span class="o">|=</span> <span class="n">cast</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="o">*</span><span class="n">it</span><span class="p">);</span>
-    <span class="p">}</span>
-    <span class="k">return</span> <span class="n">combined_opts</span><span class="p">;</span>
-  <span class="p">}</span>
-
-  <span class="k">auto</span> <span class="n">compile</span><span class="p">(</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span> <span class="n">pattern</span><span class="p">,</span> <span class="k">const</span> <span class="n">any</span><span class="o">::</span><span class="n">array</span><span class="o">&amp;</span> <span class="n">options</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">any</span> <span class="p">{</span>
-    <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span> <span class="n">err</span> <span class="o">=</span> <span class="n">nullptr</span><span class="p">;</span>
-    <span class="kt">int</span> <span class="n">erroffset</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-    <span class="k">auto</span> <span class="n">ptr</span> <span class="o">=</span> <span class="n">pcre_compile</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span>
-                            <span class="n">bitor_all</span><span class="p">(</span><span class="n">options</span><span class="p">),</span>
-                            <span class="o">&amp;</span><span class="n">err</span><span class="p">,</span>
-                            <span class="o">&amp;</span><span class="n">erroffset</span><span class="p">,</span>
-                            <span class="n">nullptr</span><span class="p">);</span>
-    <span class="k">return</span> <span class="n">ptr</span> <span class="o">?</span> <span class="n">Right</span><span class="p">(</span><span class="n">managed</span><span class="o">&lt;</span><span class="n">pcre</span><span class="o">&gt;</span><span class="p">(</span><span class="n">ptr</span><span class="p">,</span> <span class="n">pcre_free</span><span class="p">))</span> <span class="o">:</span> <span class="n">Left</span><span class="p">(</span><span class="n">string</span><span class="p">(</span><span class="n">err</span><span class="p">));</span>
-  <span class="p">}</span>
-
-  <span class="k">auto</span> <span class="n">capturedCount</span><span class="p">(</span> <span class="k">const</span> <span class="n">any</span><span class="o">&amp;</span> <span class="n">code</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">int</span> <span class="p">{</span>
-    <span class="kt">int</span> <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-    <span class="n">pcre_fullinfo</span><span class="p">(</span><span class="n">cast</span><span class="o">&lt;</span><span class="k">const</span> <span class="n">pcre</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">code</span><span class="p">),</span>
-                  <span class="n">nullptr</span><span class="p">,</span>
-                  <span class="n">PCRE_INFO_CAPTURECOUNT</span><span class="p">,</span>
-                  <span class="o">&amp;</span><span class="n">count</span><span class="p">);</span>
-    <span class="k">return</span> <span class="n">count</span><span class="p">;</span>
-  <span class="p">}</span>
-
-  <span class="k">auto</span> <span class="n">exec</span><span class="p">(</span> <span class="k">const</span> <span class="n">any</span><span class="o">&amp;</span> <span class="n">code</span><span class="p">,</span>
-             <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span> <span class="n">subject</span><span class="p">,</span>
-             <span class="kt">int</span> <span class="n">startoffset</span><span class="p">,</span>
-             <span class="k">const</span> <span class="n">any</span><span class="o">::</span><span class="n">array</span><span class="o">&amp;</span> <span class="n">options</span><span class="p">,</span>
-             <span class="kt">int</span> <span class="n">ovecsize</span> <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">any</span> <span class="p">{</span>
-    <span class="kt">int</span> <span class="n">ovector</span><span class="p">[</span><span class="n">ovecsize</span><span class="p">];</span>
-    <span class="k">auto</span> <span class="n">r</span> <span class="o">=</span> <span class="n">pcre_exec</span><span class="p">(</span><span class="n">cast</span><span class="o">&lt;</span><span class="k">const</span> <span class="n">pcre</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">code</span><span class="p">),</span>
-                       <span class="n">nullptr</span><span class="p">,</span>
-                       <span class="n">subject</span><span class="p">,</span>
-                       <span class="n">strlen</span><span class="p">(</span><span class="n">subject</span><span class="p">),</span>
-                       <span class="n">startoffset</span><span class="p">,</span>
-                       <span class="n">bitor_all</span><span class="p">(</span><span class="n">options</span><span class="p">),</span>
-                       <span class="n">ovector</span><span class="p">,</span>
-                       <span class="n">ovecsize</span><span class="p">);</span>
-    <span class="n">any</span><span class="o">::</span><span class="n">array</span> <span class="n">offsets</span><span class="p">;</span>
-    <span class="k">for</span> <span class="p">(</span><span class="k">auto</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">r</span> <span class="o">*</span> <span class="mi">2</span><span class="p">;</span> <span class="n">i</span> <span class="o">+=</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
-      <span class="n">offsets</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span> <span class="n">Tuple</span><span class="p">(</span><span class="n">ovector</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">ovector</span><span class="p">[</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">])</span> <span class="p">);</span>
-    <span class="p">}</span>
-    <span class="k">return</span> <span class="n">r</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">?</span> <span class="n">Left</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="o">:</span> <span class="n">Right</span><span class="p">(</span><span class="n">offsets</span><span class="p">);</span>
-  <span class="p">}</span>
-
-<span class="p">}</span> <span class="c1">// Main</span>
-</code></pre></div></figure>
-
-
-<p><strong>Build and run</strong></p>
-
-<figure class='code'><div class="highlight"><pre class="code"><code class = "#{lang}">$ make debug -j4 LDFLAGS=-lpcre
-...
-$ make run
-(Right [(Tuple 0 28),(Tuple 0 3),(Tuple 4 7)])
-</code></pre></div></figure>
-
-
-<p><a name="footnote"></a></br></p>
-
-<ol style="font-size:80%">
-<li>It&#8217;s also possible to go with “effectful” functions, and handle allocation and mutation in ways similar to what is done in the book, or with something like PureScript&#8217;s <code>STRef</code>, or something else altogether.</li>
+<ol>
+<li>Go to the <a href="https://github.com/pure11/pure11/releases">pure11 repo releases</a> and download the latest <code>pcc.zip</code> file. If you already have a version installed, be sure to use a version dated <strong>2016-11-22</strong> or later, since that&rsquo;s when extra support for Xcode was added.</li>
+<li>Unzip and copy to the same directory you installed other PureScript utilities (particulary <code>psc-package</code>). This restriction might be removed later.</li>
 </ol>
 
+
+<p><strong>Step 2: Create a new Xcode iOS project in the standard way</strong></p>
+
+<ol>
+<li><p>Using Xcode&rsquo;s menus:</p>
+
+<p> File &ndash;><br/>
+ New &ndash;><br/>
+ Project&hellip;&ndash;><br/>
+ iOS &ndash;><br/>
+ Single View Application &ndash;><br/>
+ Language: Objective-C (for now, we&rsquo;ll do Swift in a later post)</p></li>
+<li><p>Save the project anywhere you like</p></li>
+<li>Make sure to do your normal selection of Team, Provisioning Profile, etc. If you aren&rsquo;t a registered developer and only plan to try this on the simulator, I believe you won&rsquo;t need them.</li>
+</ol>
+
+
+<p><strong>Step 3: Create some PureScript code to use in your project</strong></p>
+
+<ol>
+<li><p>Create a directory anywhere you like. We&rsquo;ll refer to it as your PureScript working directory. In that directory, create a subdirectory called &ldquo;<code>src</code>&rdquo;.</p></li>
+<li><p>In <code>src</code>, create a PureScript source file, naming it &ldquo;<code>PMath.purs</code>&rdquo;. Add the following code to <code>PMath.purs</code>:</p></li>
+</ol>
+
+
+<ul style="position: relative; top: -2em; margin-bottom: -2em">
+
+<figure class='code'><div class="highlight"><pre class="code"><code class = "#{lang}"><span class="kr">module</span> <span class="nn">PMath</span> <span class="kr">where</span>
+
+<span class="kr">import</span> <span class="nn">Prelude</span>
+
+<span class="nf">fib</span> <span class="ow">::</span> <span class="kt">Int</span> <span class="ow">-&gt;</span> <span class="kt">Int</span>
+<span class="nf">fib</span> <span class="mi">0</span> <span class="ow">=</span> <span class="mi">0</span>
+<span class="nf">fib</span> <span class="mi">1</span> <span class="ow">=</span> <span class="mi">1</span>
+<span class="nf">fib</span> <span class="n">n</span> <span class="ow">=</span> <span class="n">fib</span> <span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="n">fib</span> <span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+</code></pre></div></figure>
+
+</ul>
+
+
+
+
+<ol start="3">
+<li>
+In the Terminal, from your working directory (one level up from <code>src</code>), run the <code>pcc</code> command with just the <code>--xcode</code> option:
+
+<span style="position: relative; top: 1em;">
+
+
+<figure class='code'><div class="highlight"><pre class="code"><code class = "#{lang}">~/Projects/BlogPureScript/$ pcc --xcode
+
+Generating psc-xcode.sh...
+Done
+Add this file to an Xcode &#39;Run Script&#39; build phase.
+
+Generating psc-package.json...
+Done
+Use the &#39;psc-package&#39; utility to install or update packages.
+
+Generating Makefile... pcc executable location /Users/andy/.local/bin/pcc
+Done
+
+Run &#39;make&#39; or &#39;make release&#39; to build an optimized release build.
+Run &#39;make debug&#39; to build an executable with assertions enabled and
+suitable for source-level debugging.
+
+The resulting binary executable will be located in output/bin (by default).
+
+~/Projects/BlogPureScript/$
+</code></pre></div></figure>
+
+
+</span>
+</li>
+</ol>
+
+
+<p><strong>Step 4: Add PureScript code to your project settings</strong></p>
+
+<ol>
+<li><p>From Xcode&rsquo;s &ldquo;Project navigator,&rdquo; select your project (topmost level). You should see various tabs in the main window. Select &ldquo;Build Phases&rdquo; and:</p>
+
+<ol type="a">
+<li>Click the &ldquo;+&rdquo; &ndash;> &ldquo;New Run Script Phase&rdquo;</li>
+<li>Drag the new &ldquo;Run Script&rdquo; section to be <em>before</em> &ldquo;Compile Sources&rdquo;</li>
+<li><p>Expand the &ldquo;Run Script&rdquo; section (triangle), and in its editor add the following:</p>
+
+<pre><code> cd path/to/your/working_dir
+ sh psc-xcode.sh
+</code></pre></li>
+</ol>
+
+
+<p>   It should look similar to this screenshot:</p>
+
+<p>   <img src="/images/run_script.png"></p></li>
+<li><p>Now go to the &ldquo;Build Settings&rdquo; tab. Using the embedded search control (upper right), enter &ldquo;header search&rdquo;. If you don&rsquo;t see any results, make sure you have the &ldquo;All&rdquo; button selected (instead of &ldquo;Basic&rdquo; or &ldquo;Customized&rdquo;). Select the &ldquo;Header Search Paths&rdquo; item and add the value &ldquo;<code>path/to/your/working_dir/output</code>&rdquo; to it, meaning the &ldquo;<code>output</code>&rdquo; subdirectory in your working directory (it doesn&rsquo;t exist yet, but it will be generated during the build process). Make sure to press &ldquo;return&rdquo; to save the value.</p>
+
+<p>   <img src="/images/search_paths.png"></p></li>
+<li><p>Again from &ldquo;Build Settings,&rdquo; change your search term to &ldquo;linker flags&rdquo; to find &ldquo;Other Linker Flags.&rdquo; Add the values<br>&ldquo;<code>-lc++ path/to/your/working_dir/output/bin/purescript.o</code>&rdquo;, as shown below. This &ldquo;<code>.o</code>&rdquo; file is a native combined object file containing all of your compiled PureScript modules (sort of like a static lib), which will be generated during the build process. Again, remember to press &ldquo;return&rdquo;.</p>
+
+<p>   <img src="/images/linker_flags.png"></p></li>
+</ol>
+
+
+<p><strong>Step 5: Add some Objective-C++ code that calls your PureScript code</strong></p>
+
+<ol>
+<li><p>In your Xcode project, rename <code>ViewController.m</code> to <code>ViewController.mm</code> &mdash; make sure you do this from Xcode, not the Terminal.</p></li>
+<li><p>In <code>ViewController.mm</code> you should see implementations for methods like <code>viewDidLoad</code>. Add the implementation for <code>viewDidAppear</code> shown below, as well as adding <code>#import "PMath/PMath.hh"</code> and <code>using PMath::fib;</code> near the top. Ignore any of the &ldquo;live&rdquo; errors for now.</p></li>
+</ol>
+
+
+<ul style="position: relative; top: -2em;">
+
+
+<figure class='code'><div class="highlight"><pre class="code"><code class = "#{lang}"><span class="cp">#import &quot;ViewController.h&quot;</span>
+<span class="cp">#import &quot;PMath/PMath.hh&quot;</span>
+
+<span class="c1">// This isn&#39;t necessary if we qualify our calls to the</span>
+<span class="c1">// function as PMath::fib(x) -- but it looks nicer...</span>
+<span class="c1">//</span>
+<span class="n">using</span> <span class="n">PMath</span><span class="o">::</span><span class="n">fib</span><span class="p">;</span>
+
+<span class="k">@interface</span> <span class="nc">ViewController</span> <span class="p">()</span>
+<span class="k">@end</span>
+
+<span class="k">@implementation</span> <span class="nc">ViewController</span>
+
+<span class="k">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">viewDidLoad</span> <span class="p">{</span>
+  <span class="p">[</span><span class="n">super</span> <span class="n">viewDidLoad</span><span class="p">];</span>
+<span class="p">}</span>
+
+<span class="k">-</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="nf">viewDidAppear:</span><span class="p">(</span><span class="kt">BOOL</span><span class="p">)</span> <span class="n">animated</span> <span class="p">{</span>
+  <span class="p">[</span><span class="n">super</span> <span class="nl">viewDidAppear:</span><span class="n">animated</span><span class="p">];</span>
+
+  <span class="c1">// Direct call to our PureScript function</span>
+  <span class="c1">//</span>
+  <span class="kt">int</span> <span class="n">result</span> <span class="o">=</span> <span class="n">fib</span><span class="p">(</span><span class="mi">10</span><span class="p">);</span>
+
+  <span class="n">NSString</span><span class="o">*</span> <span class="n">resultString</span> <span class="o">=</span>
+    <span class="p">[</span><span class="n">NSString</span> <span class="nl">stringWithFormat:</span><span class="s">@&quot;Result of fib 10 is %d&quot;</span><span class="p">,</span> <span class="n">result</span><span class="p">];</span>
+
+  <span class="n">UIAlertController</span> <span class="o">*</span> <span class="n">alert</span> <span class="o">=</span>
+    <span class="p">[</span><span class="n">UIAlertController</span> <span class="nl">alertControllerWithTitle:</span><span class="s">@&quot;Value from PureScript&quot;</span>
+                                        <span class="nl">message:</span><span class="n">resultString</span>
+                                 <span class="nl">preferredStyle:</span><span class="n">UIAlertControllerStyleAlert</span><span class="p">];</span>
+  <span class="kt">id</span> <span class="n">okAction</span> <span class="o">=</span>
+    <span class="p">[</span><span class="n">UIAlertAction</span> <span class="nl">actionWithTitle:</span><span class="s">@&quot;OK&quot;</span>
+                             <span class="nl">style:</span><span class="n">UIAlertActionStyleDefault</span>
+                           <span class="nl">handler:</span><span class="o">^</span><span class="p">(</span><span class="n">UIAlertAction</span> <span class="o">*</span> <span class="n">_Nonnull</span> <span class="n">action</span><span class="p">)</span> <span class="p">{</span>
+                           <span class="p">}];</span>
+
+  <span class="p">[</span><span class="n">alert</span> <span class="nl">addAction:</span><span class="n">okAction</span><span class="p">];</span>
+  <span class="p">[</span><span class="n">self</span> <span class="nl">presentViewController:</span><span class="n">alert</span> <span class="nl">animated:</span><span class="n">YES</span> <span class="nl">completion:</span><span class="nb">nil</span><span class="p">];</span>
+<span class="p">}</span>
+
+<span class="k">@end</span>
+</code></pre></div></figure>
+
+</ul>
+
+
+<p><strong>Step 6: Build the project and run it</strong></p>
+
+<ol>
+<li><p>For now, make sure your project is set to build a simulator target (it should be, by default). Build using Xcode&rsquo;s usual menu, Product &ndash;> Build (or shortcut Command-B). You should get a &ldquo;build succeeded&rdquo;.</p></li>
+<li><p>Run it! (menu Product &ndash;> Run or shortcut Command-R)</p>
+
+<p>   <img src="/images/ios_app.png" width="375"></p></li>
+<li><p>With Debug builds, you can use Xcode&rsquo;s debugger as well (on the generated C++ code):</p>
+
+<p>   <img src="/images/debugger.png"></p></li>
+</ol>
+
+
+<p><strong>Next steps</strong></p>
+
+<p>You can now proceed to make changes to any source files (including your PureScript ones) and simply rebuild/test/repeat using Xcode. As you&rsquo;re developing your app, if you just want to type check your PureScript changes (not recompile all the way to a binary target), use Terminal to run &ldquo;<code>make codegen</code>&rdquo; from your working directory.</p>
+
+<p>If you take a peek at the <code>psc-xcode.sh</code> script, you&rsquo;ll see that your compiled PureScript C++ objects will respect your project settings for things like Debug/Release builds and target architecture &mdash; and will rebuild appropriately if any of these things change. This also means you can do device hardware builds; as with any normal iOS project, simply change your target to one of the device variants and build.</p>
 </div>
   <div class="sharing">
   
-  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://andyarvanitis.com/an-ffi-example-for-purescript-c-plus-plus-pcre/" data-via="andyarvanitis" data-counturl="http://andyarvanitis.com/an-ffi-example-for-purescript-c-plus-plus-pcre/" data-text="“An FFI example for PureScript C++: PCRE”">Tweet</a>
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://andyarvanitis.com/ios-with-purescript-c-plus-plus/" data-via="andyarvanitis" data-counturl="http://andyarvanitis.com/ios-with-purescript-c-plus-plus/" data-text="“iOS (and macOS) with PureScript C++”">Tweet</a>
   
 </div>
 

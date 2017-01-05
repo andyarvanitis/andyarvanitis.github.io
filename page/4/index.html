@@ -9,9 +9,9 @@
   <meta name="author" content="Andy Arvanitis">
 
   
-  <meta name="description" content="I&rsquo;ve recently been playing around with Idris, a functional language in
-the Haskell family. I won&rsquo;t get into its design or features
-here, &hellip;">
+  <meta name="description" content="My previous blog post introduced a technique for
+lazy initialization in Objective-C.
+Its main advantage is the simple way of using it: instead of &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -108,7 +108,7 @@ here, &hellip;">
       
   <header>
     
-      <h1 class="entry-title"><a href="/using-idris-with-objective-c/">Using Idris With Objective-C</a></h1>
+      <h1 class="entry-title"><a href="/objective-c-safe-categories/">Safe Categories for Objective-C</a></h1>
     
     
       <p class="meta">
@@ -124,322 +124,284 @@ here, &hellip;">
   
 
 
-<time datetime="2014-02-23T15:00:00-08:00" pubdate data-updated="true">February 23 2014</time>
+<time datetime="2013-11-20T11:47:00-08:00" pubdate data-updated="true">November 20 2013</time>
         
       </p>
     
   </header>
 
 
-  <div class="entry-content"><p>I&rsquo;ve recently been playing around with <a href="http://www.idris-lang.org/">Idris</a>, a functional language in
-the <a href="http://www.haskell.org/haskellwiki/Haskell">Haskell</a> family. I won&rsquo;t get into its design or features
-here, but I&rsquo;ll simply state that, unlike Haskell, it has dependent types and is evaluated eagerly
-(not lazily) by default. It offers a simple FFI to C, so I was curious what integration with Objective-C
-would look like. I haven&rsquo;t found any examples of that, so I thought I&rsquo;d give it a try and share
-my results.</p>
+  <div class="entry-content"><p>My <a href="/lazy-initialization-for-objective-c">previous blog post</a> introduced a technique for
+<a href="http://en.wikipedia.org/wiki/Lazy_initialization">lazy initialization</a> in Objective-C.
+Its main advantage is the simple way of using it: instead of sending <code>alloc</code> or <code>new</code> to a
+class to create an instance, you send <code>lazy</code>, which could be added to <code>NSObject</code>
+via a category.</p>
 
-<p>One note: although Idris offers an LLVM backend, I only used the default C backend for this exercise.</p>
+<p>There is, of course, a big problem with adding a “nice and clean” method to
+a class with a category, especially <code>NSObject</code> — and that’s silent name collisions.
+To make matters worse, you can&rsquo;t even predict which method you&rsquo;ll end up with when multiple versions
+exist.
+The solution, as we all know, is to <del>uglify</del> try to make the name unique, typically by adding
+a prefix like &ldquo;axa_&rdquo;, yielding something like <code>axa_lazy</code>. Yuck.</p>
 
-<p>My general strategy was to use the Objective-C runtime functions via the FFI, and to define Idris
-types to keep the operations as type-safe as possible.</p>
+<p>It would be nice if we could have &ldquo;safe&rdquo; categories. Like just about everything else,
+it&rsquo;s been discussed before (e.g., <a href="http://blog.securemacprogramming.com/2013/04/can-objective-c-be-given-safe-categories/">Graham Lee&rsquo;s recent blog post</a>), and there are some good implementations out there (e.g., <a href="https://github.com/jspahrsummers/libextobjc">jspahrsummers / libextobjc</a>). This is another shot at it. The goal is something
+that is lightweight enough to avoid a library/framework (or lots of macros), and yet as safe as
+possible &mdash; maybe even completely safe.</p>
 
-<h2>Basics</h2>
+<p>There&rsquo;s only so much we can do here at compile time, so the general strategy will be to use the
+<a href="https://developer.apple.com/library/mac/documentation/cocoa/Conceptual/ObjCRuntimeGuide/Introduction/Introduction.html#//apple_ref/doc/uid/TP40008048">Objective-C runtime facilities</a> to extend classes, and use runtime assertions to catch/report conflicts.</p>
 
-<p>I started with just the basics &mdash; getting access to Objective-C classes and selectors:</p>
+<p>Let&rsquo;s start with the interface. We can just use a standard category declaration (the same used in the previous blog post):</p>
 
-<!--?prettify lang=hs?-->
-
-
-<pre><code>module objective_c
-
-%include C "objc/runtime.h"
-%include C "objc_stubs.h"
-
--------------------------------------------------------------------------------
-class Object a where
-   getPtr : a -&gt; IO Ptr
-
--------------------------------------------------------------------------------
-getClass : String -&gt; IO Ptr
--------------------------------------------------------------------------------
-getClass name = mkForeign (FFun "objc_getClass" [FString] FPtr) name
-
--------------------------------------------------------------------------------
-getSelector : String -&gt; IO Ptr
--------------------------------------------------------------------------------
-getSelector selname = mkForeign (FFun "sel_registerName" [FString] FPtr) selname 
+<pre><code>@interface NSObject (AXALazyInitCategory)
++ (instancetype)lazy;
+@end
 </code></pre>
 
-<p>This is a module defining an <code>Object</code> typeclass and two functions: one for getting classes and one for
-getting selectors from the runtime. Idris&#8217; FFI defines a <code>Ptr</code> type, which represents, as you would expect,
-a general (<code>void *</code>) C pointer. Every Objective-C object type in this exercise is an instance of
-the <code>Object</code> typeclass, including classes themselves (more later), and function <code>getPtr</code> is used to
-retrieve the underlying foreign pointer when needed. Like function/method calls to Objective-C, and
-C function calls in general, the retrieval of the pointer is IO monadic.</p>
+<p>For the implementation, our approach uses a subclass of the target class:</p>
 
-<p>Also note the <code>%include</code> statements, which directly parse C headers. I ran into some problems
-with the type signatures of a couple of functions, so I created stubs. The stub prototype used in
-this example module is:</p>
+<pre><code>#import &lt;objc/runtime.h&gt;
+#import "Object+AXALazyInitialization.h"
 
-<pre><code>extern void* objc_msgSend(void* self, void* op, ...);
+@interface AXALazyInitCategory : NSObject // superclass is the category class
+@end
+
+static Class __targetClass;  // static, so private to this file
+static Class __sourceClass;  //
+
+@implementation AXALazyInitCategory
+
++ (void)load {
+  __targetClass = [self superclass];
+  __sourceClass = [self class];
+  // do normal category-like +load stuff here, if desired...
+}
+
++ (instancetype)lazy {
+  // see previous blog post on lazy initialization...
+}
+
+@end
 </code></pre>
 
-<p>It should be possible to get rid of at least some of these stubs.</p>
+<p>So we&rsquo;ve created a subclass of the desired category class, and during class load we saved off a static
+reference to the target (in this case, <code>NSObject</code>) and source (implementations provider) classes.</p>
 
-<h2>Objective-C classes</h2>
+<p>Now, in the same source file, we define two functions. One runs on program startup, the other on
+program termination:</p>
 
-<p>Next up is an example of a specific Objective-C class. I started off with <code>NSObject</code>, putting it in its own
-module:</p>
+<pre><code>//-----------------------------------------------------------------------------
+// Constructor code -- runs afer all +load calls are made
+//-----------------------------------------------------------------------------
+__attribute__((constructor)) static void pre_run_add_category_methods() {
+  @autoreleasepool {
+    const SEL selector = @selector(lazy);
+    const Method method = class_getClassMethod(__sourceClass, selector);
 
-<!--?prettify lang=hs?-->
+    NSCAssert(!class_getClassMethod(__targetClass, selector),
+              @"Safe category: redefined method '%@' found in class '%@'",
+              NSStringFromSelector(selector), __targetClass);
 
+    class_addMethod(object_getClass(__targetClass), selector,
+                    method_getImplementation(method),
+                    method_getTypeEncoding(method));
+  }
+}
+//-----------------------------------------------------------------------------
+// Destructor code -- runs during program termination
+//-----------------------------------------------------------------------------
+__attribute__((destructor)) static void post_run_check_category_methods() {
+  @autoreleasepool {
+    const SEL selector = @selector(lazy);
+    const Method sourceMethod = class_getClassMethod(__sourceClass, selector);
+    Method targetMethod = class_getClassMethod(__targetClass, selector);
 
-<pre><code>module NSObject
-
-import objective_c
-
--------------------------------------------------------------------------------
-data NSObject'Class = Metaclass
-
-instance Object NSObject'Class where
-   getPtr o = getClass "NSObject"
-
--------------------------------------------------------------------------------
-metaclass : IO NSObject'Class
--------------------------------------------------------------------------------
-metaclass = return Metaclass
-
--------------------------------------------------------------------------------
-record NSObject : Type where
-   asObject : (pointer : Ptr) -&gt; NSObject
-
-instance Object NSObject where
-   getPtr o = return (pointer o)
+    NSCAssert(method_getImplementation(targetMethod) == 
+              method_getImplementation(sourceMethod),
+              @"Safe category: redefined method '%@' found in class '%@'",
+              NSStringFromSelector(selector), __targetClass);
+  }
+}
 </code></pre>
 
-<p>The type <code>NSObject'Class</code> represents the type of the class itself &mdash; more precisely, in Objective-C terms, an instance of the object&rsquo;s metaclass. In other words, it&rsquo;s used to invoke class methods. To
-get the metaclass instance, call the IO monadic <code>metaclass</code> function. Finally, type
-<code>NSObject</code> represents an object, or instance of the objc class, used to invoke instance methods. You can
-also see the for-internal-use implementations of <code>getPtr</code>.</p>
+<p>As noted, the function with the <code>constructor</code> attribute gets called after all <code>+load</code> methods have run.
+Using <code>class_getClassMethod</code>, we first check to make sure this class &mdash; or any of its superclasses &mdash; doesn&rsquo;t already have an implementation of the method. If the test passes, we
+add it to the class, just as real categories add methods to classes. An alternative approach
+might be to simply check the result of the <code>class_addMethod</code> call. However, it only fails if the class
+<em>itself</em> already had the method; otherwise, it overrides any version provided by a superclass. I want to be
+extra-careful with my technique, so I have it fail if one exists up the chain.</p>
 
-<p>I didn&rsquo;t bother to define any objc class or instance methods for <code>NSObject</code> here. Instead,
-I&rsquo;ll pick a more interesting example: <code>NSString</code>.</p>
+<p>The assertion will fail (causing the program to terminate with an error message) if our method
+of interest was:</p>
 
-<h2>NSString</h2>
-
-<p>I&rsquo;ve fleshed out a few methods for <code>NSString</code> below so you&rsquo;ll be able to see a workable and
-hopefully slightly interesting &ldquo;hello, world&rdquo; (what else?) example.</p>
-
-<p>You might notice that the object arguments for each function (method) appear last. This allows the
-convenient use of Idris&#8217; bind operator, <code>&gt;&gt;=</code>, when calling them. You&rsquo;ll see examples of this
-in the final code snippet. I got the idea from the
-<a href="http://hoc.sourceforge.net/">HOC Haskell to Objective-C bindings</a>.</p>
-
-<p>Idris provides a way to define functions for doing implicit type conversions. This is handy for safely using
-our objc objects with superclass object functions (methods). Function <code>asNSObject</code> below
-illustrates how we can do this.</p>
-
-<p>Another thing to note is Idris&#8217; facility for named parameters/arguments, as seen in the definition
-of function <code>stringByReplacingOccurrencesOfString</code> below. In the final code snippet, I&rsquo;ll show how it&rsquo;s used.</p>
-
-<!--?prettify lang=hs?-->
+<ol>
+<li>defined in the class (or a superclass) to start with, or</li>
+<li>added by any &ldquo;standard&rdquo; category (since they are loaded before this code is run), or</li>
+<li>added by any other runtime technique that <em>just happened to run before this one</em>.</li>
+</ol>
 
 
-<pre><code>module NSString
+<p>Cases 1 and 2 are pretty solid, but of course we can&rsquo;t rely on 3. Thus we need to do another check
+later, specifically in the function with the <code>destructor</code> attribute, which runs on program termination.
+What happens here is we check the registered method implementation for the class again. If it&rsquo;s not
+the one we added in this source file, we raise an error. This will catch any runtime method changes
+that any source file or library might have done in our executable.</p>
 
-import objective_c
-import NSObject 
-import NSRange
+<p>This is pretty good, but still not foolproof. I want to be extra-extra-careful (paranoid?). What if
+someone sneaked in a version of the method not in the class itself, but a subclass?
+Technically, it&rsquo;s a valid override, but I&rsquo;m adding a method that I want to ensure is a safe
+extension to the standard frameworks, with no unknown conflicts. The same goes for the superclasses
+up the inheritance chain &mdash; what if I don&rsquo;t want to accidentally override anything here?</p>
 
--------------------------------------------------------------------------------
-data NSString'Class = Metaclass
+<p>The following code is intended to handle all these situations. While we&rsquo;re at it, we should have
+a general way of adding and checking all of the methods in the &ldquo;implementation provider&rdquo; class,
+rather than doing it manually.</p>
 
-instance Object NSString'Class where
-   getPtr o = getClass "NSString"
+<pre><code>// File SafeCategories.h
+#import &lt;Foundation/Foundation.h&gt;
+#import &lt;objc/runtime.h&gt;
 
--------------------------------------------------------------------------------
-metaclass : IO NSString'Class
--------------------------------------------------------------------------------
-metaclass = return Metaclass
+//---------------------------------------------------------------------------------------
+// Pseudo function that must be called in "category" +load method. 
+// The only public interface here.
+//---------------------------------------------------------------------------------------
+#define load_as_safe_category()        \
+  __targetClass = [self superclass]; \
+  __sourceClass = [self class];
 
--------------------------------------------------------------------------------
-record NSString : Type where
-   asObject : (pointer : Ptr) -&gt; NSString
+//---------------------------------------------------------------------------------------
+// Private static variable and function declarations
+//---------------------------------------------------------------------------------------
+static Class __targetClass = Nil;
+static Class __sourceClass = Nil;
 
-instance Object NSString where
-   getPtr o = return (pointer o)
+static NSString* const __RedefinedMethodFormattedErrorMessage =
+    @"Safe category: redefined method '%@' found in class '%@'";
 
--------------------------------------------------------------------------------
-implicit asNSObject : NSString -&gt; NSObject
--------------------------------------------------------------------------------
-asNSObject o = NSObject.asObject (NSString.pointer o)
+static NSArray* get_related_classes(Class baseClass);
+static void process_methods(const Class sourceClass, const Class targetClass,
+                            void (^method_operation)(Class, Method));
 
--------------------------------------------------------------------------------
-implicit liftNSString : NSString -&gt; IO NSString
--------------------------------------------------------------------------------
-liftNSString s = return s
+//---------------------------------------------------------------------------------------
+// Constructor code -- runs afer all +load calls are made
+//---------------------------------------------------------------------------------------
+__attribute__((constructor)) static void pre_run_add_category_methods() {
+  @autoreleasepool {
+    process_methods(__sourceClass, __targetClass, ^(Class cls, Method method) {
+      const SEL sel = method_getName(method);
+      NSCAssert(!class_getInstanceMethod(cls, sel), // works with metaclasses too
+                __RedefinedMethodFormattedErrorMessage,
+                NSStringFromSelector(sel), cls);
+      class_addMethod(cls, sel, method_getImplementation(method), method_getTypeEncoding(method));
+    });
+  }
+}
 
--------------------------------------------------------------------------------
---------------------------- Class methods -------------------------------------
--------------------------------------------------------------------------------
+#if !defined(NS_BLOCK_ASSERTIONS) // We don't need any of this if assertions are disabled
 
--------------------------------------------------------------------------------
-stringWithUTF8String : String -&gt; NSString'Class -&gt; IO NSString
--------------------------------------------------------------------------------
-stringWithUTF8String s c = do 
-   obj &lt;- getPtr c
-   sel &lt;- getSelector "stringWithUTF8String:" 
-   result &lt;- mkForeign (FFun "objc_msgSend" [FPtr, FPtr, FString] FPtr) 
-                                             obj   sel   s
-   return (asObject result)
+//---------------------------------------------------------------------------------------
+// Destructor code -- runs during program termination
+//---------------------------------------------------------------------------------------
+__attribute__((destructor)) static void post_run_check_category_methods() {
+  @autoreleasepool {
+    for (Class relatedClass in get_related_classes(__targetClass)) {
+      process_methods(__sourceClass, relatedClass, ^(Class cls, Method method) {
+        const SEL selector = method_getName(method);
+        unsigned int methodsCount = 0;
+        Method* methods = class_copyMethodList(cls, &amp;methodsCount); // doesn't search superclasses
+        for (unsigned int i = 0; i &lt; methodsCount; i++) {
+          if (method_getName(methods[i]) == selector) {
+            NSCAssert(method_getImplementation(methods[i]) == method_getImplementation(method),
+                      __RedefinedMethodFormattedErrorMessage,
+                      NSStringFromSelector(selector), cls);
+            break;
+          }
+        }
+        free(methods);
+      });
+    }
+  }
+}
 
--------------------------------------------------------------------------------
---------------------------- Instance methods ----------------------------------
--------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------
+// Look through all of the classes registered with the runtime for super and subclasses.
+//---------------------------------------------------------------------------------------
+static NSArray* get_related_classes(Class baseClass) {
+  NSMutableArray* relatedClasses = [NSMutableArray array];
+  // First get the base and all its superclasses
+  for (Class superClass = baseClass;
+       superClass != Nil;
+       superClass = class_getSuperclass(superClass)) {
+    [relatedClasses addObject: superClass];
+  }
+  // Now get all subclasses of the base class
+  unsigned int count = 0;
+  Class* runtimeClasses = objc_copyClassList(&amp;count);
+  for (unsigned int i = 0; i &lt; count; i++) {
+    Class superClass = runtimeClasses[i];
+    do {
+      superClass = class_getSuperclass(superClass);
+    } while (superClass &amp;&amp; superClass != baseClass);
 
--------------------------------------------------------------------------------
-length : NSString -&gt; IO Int
--------------------------------------------------------------------------------
-length o = do 
-   obj &lt;- getPtr o
-   sel &lt;- getSelector "length" 
-   mkForeign (FFun "objc_msgSend" [FPtr, FPtr] FInt) obj sel
+    if (superClass != nil) {
+      [relatedClasses addObject: runtimeClasses[i]];
+    }
+  }
+  free(runtimeClasses);
+  return relatedClasses;
+}
 
--------------------------------------------------------------------------------
-UTF8String : NSString -&gt; IO String
--------------------------------------------------------------------------------
-UTF8String o = do 
-   obj &lt;- getPtr o
-   sel &lt;- getSelector "UTF8String" 
-   mkForeign (FFun "objc_msgSend" [FPtr, FPtr] FString) obj sel
+#endif // !defined(NS_BLOCK_ASSERTIONS)
 
--------------------------------------------------------------------------------
-stringByReplacingOccurrencesOfString : NSString -&gt; (withString : NSString) -&gt;
-                                       NSString -&gt; 
-                                       IO NSString
--------------------------------------------------------------------------------
-stringByReplacingOccurrencesOfString s r o = do 
-   obj &lt;- getPtr o
-   sel &lt;- getSelector "stringByReplacingOccurrencesOfString:withString:"
-   old &lt;- getPtr s
-   new &lt;- getPtr r
-   result &lt;- mkForeign (FFun "objc_msgSend" [FPtr, FPtr, FPtr, FPtr] FPtr) 
-                                             obj   sel   old   new      
-   return (asObject result)
-
--------------------------------------------------------------------------------
-substringWithRange : NSRange -&gt; NSString -&gt; IO NSString
--------------------------------------------------------------------------------
-substringWithRange (NSMakeRange loc len) o = do
-   obj &lt;- getPtr o
-   sel &lt;- getSelector "substringWithRange:"
-   result &lt;- mkForeign (FFun "objc_msgSend" [FPtr, FPtr, FInt, FInt] FPtr) 
-                                             obj   sel   loc   len      
-   return (asObject result)
+//---------------------------------------------------------------------------------------
+static void process_methods(const Class sourceClass, const Class targetClass,
+                            void (^method_operation)(Class, Method)) {
+  void (^iterate_methods)(Class) = ^(Class cls) {
+    const BOOL isMetaClass = class_isMetaClass(cls);
+    unsigned int count = 0;
+    Method* sourceMethods =
+        class_copyMethodList(isMetaClass ? object_getClass(sourceClass) : sourceClass, &amp;count);
+    for (unsigned int i = 0; i &lt; count; i++) {
+      if (!isMetaClass || method_getName(sourceMethods[i]) != @selector(load)) {
+        method_operation(cls, sourceMethods[i]);
+      }
+    }
+    free(sourceMethods);
+  };
+  iterate_methods(object_getClass(targetClass));  // class methods
+  iterate_methods(targetClass);                   // instance methods
+}
 </code></pre>
 
-<h2>Hello, world</h2>
+<p>And as an example of how it&rsquo;s actually used, here&rsquo;s the original example rewritten:</p>
 
-<p>Putting it all together, we can now get a functioning Objective-C/Foundation example.</p>
+<pre><code>#import "Object+AXALazyInitialization.h"
+#import "SafeCategories.h"
 
-<!--?prettify lang=hs?-->
+@interface AXALazyInitCategory : NSObject // superclass is the category class
+@end
 
+@implementation AXALazyInitCategory
 
-<pre><code>module Main
++ (void)load {
+  load_as_safe_category();
+}
 
-import NSString
-import NSFunctions
-
--------------------------------------------------------------------------------
-%lib C "objc" 
-%link C "/System/Library/Frameworks/Foundation.framework/Foundation" 
--------------------------------------------------------------------------------
-
--------------------------------------------------------------------------------
-main : IO () 
--------------------------------------------------------------------------------
-main = do
-
-   recipient &lt;- NSString.metaclass &gt;&gt;= stringWithUTF8String "world" 
-   separator &lt;- NSString.metaclass &gt;&gt;= stringWithUTF8String ", " 
-
-   greeting &lt;- NSString.metaclass &gt;&gt;= 
-                  stringWithUTF8String "hello" &gt;&gt;=
-                     stringByAppendingString separator &gt;&gt;=
-                        stringByAppendingString recipient
-
-   format &lt;- NSString.metaclass &gt;&gt;= stringWithUTF8String "%@!"
-
-   NSLog format greeting
-
-   replacement &lt;- NSString.metaclass &gt;&gt;= stringWithUTF8String "everyone" 
-
-   greeting &lt;- greeting &gt;&gt;= stringByReplacingOccurrencesOfString recipient {withString = replacement}
-
-   NSLog format greeting
-
-   substr &lt;- greeting &gt;&gt;= substringWithRange (NSMakeRange 7 5)
-
-   substrLen &lt;- substr &gt;&gt;= length -- alternatively, "length substr"
-
-   substring &lt;- substr &gt;&gt;= UTF8String -- alternatively, "UTF8String substr"
-
-   -- 'substring' is now a regular Idris string, and 'substrLen' is an Int
-   putStrLn $ "Substring: " ++ substring
-   putStrLn $ "Length: " ++ show substrLen   
-
-   return ()
++ (instancetype)lazy {
+  // see previous blog post on lazy initialization...
+}
+@end
 </code></pre>
 
-<p>The output:</p>
+<p>I feel this approach covers all the possible scenarios, but please feel free to <a href="https://twitter.com/intent/tweet?text=@andyarvanitis%20RE:%20safe%20categories%20">provide feedback via twitter</a> if you think I&rsquo;ve missed something.</p>
 
-<pre><code>2014-02-23 14:50:37.209 hello[1622:507] hello, world!
-2014-02-23 14:50:37.210 hello[1622:507] hello, everyone!
-Substring: every
-Length: 5
-</code></pre>
-
-<p>I intentionally use Idris&#8217; <code>&gt;&gt;=</code> bind in this code. I believe this works pretty well, overall.
-You get something reminiscent of Objective-C message passing, you get nice chaining,
-and you stick with idiomatic Idris monad conventions. Idris does allow some really cool
-user-defined syntax extensions, so if you wanted, you could actually do something like this:</p>
-
-<pre><code>term syntax "[" [o] [s1] ":" [arg1] [s2] ":" [arg2] "]" = (return o) &gt;&gt;= (s1 arg1 {s2 = arg2})
-
-...
-
-greeting &lt;- [greeting stringByReplacingOccurrencesOfString: recipient 
-                                                withString: replacement]
-</code></pre>
-
-<p>This would effectively give you an EDSL for some very familiar-looking Objective-C code. As tempting
-as something like this is, I would probably stay with an all- <code>&gt;&gt;=</code> approach.</p>
-
-<h2>Final thoughts</h2>
-
-<p>If you wanted to use standard Objective-C frameworks directly&mdash;i.e., not just a couple of adapter
-classes&mdash;you probably wouldn&rsquo;t want to code the bindings by hand. You would want a utility to
-parse the headers and generate something that looks like the <code>NSString</code> module example. This
-shouldn&rsquo;t be too hard to do, actually. For example, given my experiences with
-<a href="https://github.com/eerolanguage/eero/wiki/Translator">eero&rsquo;s source-to-source translator</a>,
-clang&rsquo;s rewriting facilities could probably handle it well. There would also be some work
-involved in getting things like memory management, returned structs, variadic functions, etc.
-working seamlessly.</p>
-
-<p>Also note that this is a contrived example. A good binding library would have more seamless
-support for common conversions like native strings to/from Objective-C strings. And of course
-you would want to do most of your string (or any other data) manipulations in Idris&#8217; pure
-functional world and just get the results over to Objective-C. This was just a
-convenient example.</p>
-
-<p>You can find all of this sample code on <a href="https://github.com/andyarvanitis/IdrisObjCExperiment">github</a>.</p>
-
-<p>Please feel free to
-<a href="https://twitter.com/intent/tweet?text=@andyarvanitis%20RE:%20idris%2Dobjc%20">provide feedback via Twitter</a>.</p>
+<p>In case you&rsquo;re wondering: yes, I am considering adding direct language support for something like this to
+<a href="http://eerolanguage.org">eero</a> (though not quite yet).</p>
 </div>
   <div class="sharing">
   
-  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://andyarvanitis.com/using-idris-with-objective-c/" data-via="andyarvanitis" data-counturl="http://andyarvanitis.com/using-idris-with-objective-c/" data-text="“Using Idris with Objective-C”">Tweet</a>
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://andyarvanitis.com/objective-c-safe-categories/" data-via="andyarvanitis" data-counturl="http://andyarvanitis.com/objective-c-safe-categories/" data-text="“Safe Categories for Objective-C”">Tweet</a>
   
 </div>
 
