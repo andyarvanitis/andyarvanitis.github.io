@@ -59,7 +59,7 @@ module Jekyll
       Dir.chdir(code_path) do
         code = file.read
         @filetype = file.extname.sub('.','') if @filetype.nil?
-        title = @title ? "#{@title} (#{file.basename})" : file.basename
+        title = @title ? "#{@title} #{file.basename}" : file.basename
         url = "/#{code_dir}/#{@file}"
         source = "<figure class='code'><figcaption><span>#{title}</span> <a href='#{url}'>download</a></figcaption>\n"
         source += "#{highlight(code, @filetype)}</figure>"
