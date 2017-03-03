@@ -6,7 +6,7 @@ namespace Main {
   static auto bitor_all( const any::array& opts ) -> int {
     int combined_opts = 0;
     for (auto it = opts.cbegin(), end = opts.cend(); it != end; it++) {
-      combined_opts |= cast<int>(*it);
+      combined_opts |= static_cast<int>(*it);
     }
     return combined_opts;
   }
@@ -24,7 +24,7 @@ namespace Main {
 
   auto capturedCount( const any& code ) -> int {
     int count = 0;
-    pcre_fullinfo(cast<const pcre*>(code),
+    pcre_fullinfo(&cast<pcre>(code),
                   nullptr,
                   PCRE_INFO_CAPTURECOUNT,
                   &count);
@@ -37,7 +37,7 @@ namespace Main {
              const any::array& options,
              int ovecsize ) -> any {
     int ovector[ovecsize];
-    auto r = pcre_exec(cast<const pcre*>(code),
+    auto r = pcre_exec(&cast<pcre>(code),
                        nullptr,
                        subject,
                        strlen(subject),
